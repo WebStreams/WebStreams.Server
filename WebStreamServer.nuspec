@@ -7,8 +7,9 @@
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
     <!-- <licenseUrl>http://LICENSE_URL_HERE_OR_DELETE_THIS_LINE</licenseUrl>
-    <projectUrl>http://PROJECT_URL_HERE_OR_DELETE_THIS_LINE</projectUrl> -->
+     -->
     <!-- <iconUrl>http://ICON_URL_HERE_OR_DELETE_THIS_LINE</iconUrl> -->
+    <projectUrl>https://github.com/daprlabs/WebStreamServer</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Reactive Web Streams allows you to create controllers returning and consuming Rx observables, operating over WebSockets.</description>
     <!-- <releaseNotes>Summary of changes made in this release of the package.</releaseNotes> -->
