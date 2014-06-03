@@ -7,8 +7,8 @@
     <ProjectGuid>{EEA4EA9C-9F63-4AD1-A920-06C6606FB1EB}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WebStream</RootNamespace>
-    <AssemblyName>WebStreamServer</AssemblyName>
+    <RootNamespace>Dapr.WebStream.Server</RootNamespace>
+    <AssemblyName>Dapr.WebStream.Server</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>

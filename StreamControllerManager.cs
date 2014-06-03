@@ -1,13 +1,13 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="StreamControllerManager.cs" company="">
-//   
+// <copyright file="StreamControllerManager.cs" company="Dapr Labs">
+//   Copyright 2014.
 // </copyright>
 // <summary>
 //   The stream controller manager.
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace WebStream
+namespace Dapr.WebStream.Server
 {
     using System;
     using System.Collections.Concurrent;
@@ -93,7 +93,7 @@ namespace WebStream
                     // Select the proxy observable into the correct shape.
                     var selectIncomingObservable = typeof(Observable).GetGenericMethod(
                         "Select",
-                        new[] { info.ParameterType, typeof(Func<,>).MakeGenericType(typeof(string), info.ParameterType.GenericTypeArguments[0]) },
+                        new[] { typeof(IObservable<string>), typeof(Func<,>).MakeGenericType(typeof(string), info.ParameterType.GenericTypeArguments[0]) },
                         new[] { typeof(string), info.ParameterType.GenericTypeArguments[0] });
                     var next = Expression.Parameter(typeof(string), "next");
                     var observableType = info.ParameterType.GenericTypeArguments[0];

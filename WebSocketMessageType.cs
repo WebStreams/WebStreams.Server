@@ -1,13 +1,13 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="WebSocketMessageType.cs" company="">
-//   
+// <copyright file="WebSocketMessageType.cs" company="Dapr Labs">
+//   Copyright 2014.
 // </copyright>
 // <summary>
 //   WebSocket message type.
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace WebStream
+namespace Dapr.WebStream.Server
 {
     using System;
 

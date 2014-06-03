@@ -1,15 +1,17 @@
-namespace WebStream
-{
-    using System;
-    using System.Collections.Generic;
-    using System.Threading.Tasks;
+// --------------------------------------------------------------------------------------------------------------------
+// <copyright file="WebSocketConstants.cs" company="Dapr Labs">
+//   Copyright 2014.
+// </copyright>
+// <summary>
+//   The WebSocket OWIN constants.
+// </summary>
+// --------------------------------------------------------------------------------------------------------------------
 
+namespace Dapr.WebStream.Server
+{
     /// <summary>
     /// The WebSocket OWIN constants.
     /// </summary>
-    /// <remarks>
-    /// See: http://owin.org/extensions/owin-WebSocket-Extension-v0.4.0.htm
-    /// </remarks>
     internal static class WebSocketConstants
     {
         /// <summary>

@@ -1,4 +1,13 @@
-namespace WebStream
+// --------------------------------------------------------------------------------------------------------------------
+// <copyright file="GenericMethodReflectionHelper.cs" company="Dapr Labs">
+//   Copyright 2014.
+// </copyright>
+// <summary>
+//   Reflection helper for generic methods.
+// </summary>
+// --------------------------------------------------------------------------------------------------------------------
+
+namespace Dapr.WebStream.Server
 {
     using System;
     using System.Linq;
@@ -82,6 +91,7 @@ namespace WebStream
                     return false;
                 }
             }
+
             return true;
         }
     }

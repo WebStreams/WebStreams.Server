@@ -1,13 +1,13 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="OwinExtensions.cs" company="">
-//   
+// <copyright file="OwinExtensions.cs" company="Dapr Labs">
+//   Copyright 2014.
 // </copyright>
 // <summary>
 //   OWIN extensions.
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace WebStream
+namespace Dapr.WebStream.Server
 {
     using System;
     using System.Collections.Concurrent;
@@ -24,9 +24,6 @@ namespace WebStream
     using Newtonsoft.Json.Serialization;
 
     using Owin;
-    
-    // Signature 
-    using WebSocketAccept = System.Action<System.Collections.Generic.IDictionary<string, object>, System.Func<System.Collections.Generic.IDictionary<string, object>, System.Threading.Tasks.Task>>;
 
     /// <summary>
     /// OWIN extensions.
@@ -77,7 +74,7 @@ namespace WebStream
                 {
                     var path = ctx.Request.Path.Value;
 
-                    var accept = ctx.Get<WebSocketAccept>(WebSocketConstants.Accept);
+                    var accept = ctx.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
                     if (accept != null)
                     {
                         // TODO: This is clearly broken.... doesn't handle clean URL arguments at all
