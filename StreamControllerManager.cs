@@ -16,7 +16,6 @@ namespace Dapr.WebStream.Server
     using System.Linq.Expressions;
     using System.Reactive.Linq;
     using System.Reflection;
-    using System.Web.Http;
 
     using Newtonsoft.Json;
 
@@ -73,19 +72,17 @@ namespace Dapr.WebStream.Server
 
             // Construct expressions to retrieve each of the controller method's parameters.
             var parameters = new List<Expression>();
-            var parameterInfos = method.GetParameters();
-            for (var i = 0; i < parameterInfos.Length; i++)
+            foreach (var parameter in method.GetParameters())
             {
-                var info = parameterInfos[i];
-                var name = info.Name.ToLowerInvariant();
+                var name = parameter.Name.ToLowerInvariant();
 
                 Expression value;
-                if (info.ParameterType == typeof(string))
+                if (parameter.ParameterType == typeof(string))
                 {
                     // Strings need no conversion, just pluck the value from the parameter list.
                     value = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
                 }
-                else if (info.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
+                else if (parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
                     // This is an incoming observable, get the proxy observable to pass in.
                     var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(name) });
@@ -93,10 +90,10 @@ namespace Dapr.WebStream.Server
                     // Select the proxy observable into the correct shape.
                     var selectIncomingObservable = typeof(Observable).GetGenericMethod(
                         "Select",
-                        new[] { typeof(IObservable<string>), typeof(Func<,>).MakeGenericType(typeof(string), info.ParameterType.GenericTypeArguments[0]) },
-                        new[] { typeof(string), info.ParameterType.GenericTypeArguments[0] });
+                        new[] { typeof(IObservable<string>), typeof(Func<,>).MakeGenericType(typeof(string), parameter.ParameterType.GenericTypeArguments[0]) },
+                        new[] { typeof(string), parameter.ParameterType.GenericTypeArguments[0] });
                     var next = Expression.Parameter(typeof(string), "next");
-                    var observableType = info.ParameterType.GenericTypeArguments[0];
+                    var observableType = parameter.ParameterType.GenericTypeArguments[0];
                     var selector =
                         Expression.Lambda(
                             Expression.Convert(
@@ -113,9 +110,9 @@ namespace Dapr.WebStream.Server
                 else
                 {
                     // Deserialize all other types as though they're JSON.
-                    var parameter = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                    var deserialized = Expression.Call(null, deserialize, new Expression[] { parameter, Expression.Constant(info.ParameterType) });
-                    value = Expression.Convert(deserialized, info.ParameterType);
+                    var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
+                    var deserialized = Expression.Call(null, deserialize, new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType) });
+                    value = Expression.Convert(deserialized, parameter.ParameterType);
                 }
 
                 parameters.Add(value);
@@ -173,18 +170,18 @@ namespace Dapr.WebStream.Server
         }
 
         /// <summary>
-        /// Returns the <see cref="RouteAttribute.Template"/> value for the provided <paramref name="method"/>.
+        /// Returns the <see cref="RouteAttribute.Route"/> value for the provided <paramref name="method"/>.
         /// </summary>
         /// <param name="method">
         /// The method.
         /// </param>
         /// <returns>
-        /// The <see cref="RouteAttribute.Template"/> value for the provided <paramref name="method"/>.
+        /// The <see cref="RouteAttribute.Route"/> value for the provided <paramref name="method"/>.
         /// </returns>
         public string GetRouteSuffixTemplate(MethodInfo method)
         {
             var attr = method.GetCustomAttribute<RouteAttribute>();
-            return attr != null ? attr.Template : string.Empty;
+            return attr != null ? attr.Route : string.Empty;
         }
 
         /// <summary>
@@ -257,7 +254,7 @@ namespace Dapr.WebStream.Server
             var streams = this.GetStreamMethods(type).ToList();
             return
                 streams
-                    .Select(method => new StreamRoute { Method = method, Template = this.JoinRouteParts(prefix, this.GetRouteSuffixTemplate(method)) });
+                    .Select(method => new StreamRoute { Handler = method, Route = this.JoinRouteParts(prefix, this.GetRouteSuffixTemplate(method)) });
         }
     }
 }

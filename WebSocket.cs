@@ -18,7 +18,7 @@ namespace Dapr.WebStream.Server
     /// <summary>
     /// The web socket context.
     /// </summary>
-    internal class WebSocket
+    internal class WebSocket : IDisposable
     {
         /// <summary>
         /// The function used to send data.
@@ -44,6 +44,11 @@ namespace Dapr.WebStream.Server
         /// A CancellationToken provided by the server to signal that the WebSocket has been canceled/aborted.
         /// </summary>
         private readonly CancellationToken callCancelled;
+
+        /// <summary>
+        /// A value indicating whether this instance is disposed.
+        /// </summary>
+        private bool disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebSocket"/> class.
@@ -79,7 +84,7 @@ namespace Dapr.WebStream.Server
             get
             {
                 object status;
-                return this.context.TryGetValue(WebSocketConstants.ClientCloseStatus, out status) && (int)status != 0;
+                return this.disposed || (this.context.TryGetValue(WebSocketConstants.ClientCloseStatus, out status) && (int)status != 0);
             }
         }
 
@@ -120,9 +125,10 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// The <see cref="Task"/>.
         /// </returns>
-        public Task Send(ArraySegment<byte> data, int messageType, bool endOfMessage)
+        public async Task Send(ArraySegment<byte> data, int messageType, bool endOfMessage)
         {
-            return this.sendAsync(data, messageType, endOfMessage, this.callCancelled);
+            this.ThrowIfDisposed();
+            await this.sendAsync(data, messageType, endOfMessage, this.callCancelled);
         }
 
         /// <summary>
@@ -136,6 +142,7 @@ namespace Dapr.WebStream.Server
         /// </returns>
         public async Task Send(string message)
         {
+            this.ThrowIfDisposed();
             var bytes = Encoding.UTF8.GetBytes(message);
             var buffer = new ArraySegment<byte>(bytes);
             await this.Send(buffer, (int)WebSocketMessageType.Text, true);
@@ -152,6 +159,7 @@ namespace Dapr.WebStream.Server
         /// </returns>
         public async Task<ReceivedChunkMetadata> Receive(ArraySegment<byte> data)
         {
+            this.ThrowIfDisposed();
             var message = await this.receiveAsync(data, this.callCancelled);
             return new ReceivedChunkMetadata { WebSocketMessageType = (WebSocketMessageType)message.Item1, EndOfMessage = message.Item2, Count = message.Item3 };
         }
@@ -164,6 +172,7 @@ namespace Dapr.WebStream.Server
         /// </returns>
         public async Task<string> ReceiveString()
         {
+            this.ThrowIfDisposed();
             var result = new StringBuilder();
             var buffer = new ArraySegment<byte>(new byte[4096]);
             var message = await this.receiveAsync(buffer, this.callCancelled);
@@ -189,9 +198,30 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// The <see cref="Task"/>.
         /// </returns>
-        public Task Close(int closeStatus, string closeDescription)
+        public async Task Close(int closeStatus, string closeDescription)
         {
-            return this.closeAsync(closeStatus, closeDescription, this.callCancelled);
+            this.ThrowIfDisposed();
+            await this.closeAsync(closeStatus, closeDescription, this.callCancelled);
+        }
+
+        /// <summary>
+        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+        /// </summary>
+        public void Dispose()
+        {
+            this.disposed = true;
+        }
+
+        /// <summary>
+        /// Throws <see cref="ObjectDisposedException"/> if this instance has been disposed.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
+        private void ThrowIfDisposed()
+        {
+            if (this.disposed)
+            {
+                throw new ObjectDisposedException("This instance has been disposed.");
+            }
         }
 
         /// <summary>

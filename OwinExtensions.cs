@@ -10,7 +10,6 @@
 namespace Dapr.WebStream.Server
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using System.Net.WebSockets;
@@ -68,7 +67,7 @@ namespace Dapr.WebStream.Server
             var routes = builder.GetStreamRoutes(typeof(T));
 
             var controller = builder.GetStreamController(typeof(T));
-            var invokers = routes.ToDictionary(r => r.Template, r => builder.GetInvoker(r.Method, serializerSettings));
+            var invokers = routes.ToDictionary(r => r.Route, r => builder.GetInvoker(r.Handler, serializerSettings));
             app.Use(
                 async (ctx, next) =>
                 {
@@ -77,13 +76,12 @@ namespace Dapr.WebStream.Server
                     var accept = ctx.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
                     if (accept != null)
                     {
-                        // TODO: This is clearly broken.... doesn't handle clean URL arguments at all
                         var route = invokers.FirstOrDefault(r => path.StartsWith(r.Key));
                         if (route.Value != null)
                         {
                             // Accept the socket.
                             var args = ctx.Request.Query.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault());
-                            accept(null, CreateWebStreamRequestHandler(route.Value, controller, args));
+                            accept(null, CreateStreamHandler(route.Value, controller, args));
                         }
                         else
                         {
@@ -100,8 +98,8 @@ namespace Dapr.WebStream.Server
         /// <summary>
         /// Returns a handler for incoming Web stream requests.
         /// </summary>
-        /// <param name="invoker">
-        /// The invoker.
+        /// <param name="handler">
+        /// The handler.
         /// </param>
         /// <param name="controller">
         /// The controller.
@@ -112,23 +110,35 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// A handler for incoming Web stream requests.
         /// </returns>
-        private static Func<IDictionary<string, object>, Task> CreateWebStreamRequestHandler(
-            StreamControllerManager.Invoker invoker,
+        private static Func<IDictionary<string, object>, Task> CreateStreamHandler(
+            StreamControllerManager.Invoker handler,
             object controller,
             IDictionary<string, string> args)
         {
             return async environment =>
             {
-                var socket = new WebSocket(environment);
-                var incomingObservables = new ConcurrentDictionary<string, Subject<string>>();
-                Func<string, IObservable<string>> getObservable = name => incomingObservables.GetOrAdd(name, _ => new Subject<string>());
+                using (var socket = new WebSocket(environment))
+                {
+                    var incoming = new Dictionary<string, Subject<string>>();
+                    Func<string, IObservable<string>> getIncoming = name =>
+                    {
+                        Subject<string> result;
+                        if (!incoming.TryGetValue(name, out result))
+                        {
+                            result = new Subject<string>();
+                            incoming.Add(name, result);
+                        }
 
-                // Hook up the incoming and outgoing message pumps.
-                var outgoingMessagePump = SubscribeViaSocket(invoker(controller, args, getObservable), socket);
-                var incomingMessagePump = SubscribeManyToSocket(socket, incomingObservables);
+                        return result;
+                    };
 
-                // Close the socket when either pump finishes.
-                await Task.WhenAny(outgoingMessagePump, incomingMessagePump);
+                    // Hook up the incoming and outgoing message pumps.
+                    var outgoingMessagePump = SubscribeViaSocket(() => handler(controller, args, getIncoming), socket);
+                    var incomingMessagePump = SubscribeManyToSocket(socket, incoming);
+
+                    // Close the socket when either pump finishes.
+                    await Task.WhenAny(outgoingMessagePump, incomingMessagePump);
+                }
             };
         }
 
@@ -144,7 +154,7 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// A <see cref="Task"/> which completes when an error occurs, the socket closes, or .
         /// </returns>
-        private static async Task SubscribeManyToSocket(WebSocket socket, ConcurrentDictionary<string, Subject<string>> incomingObservables)
+        private static async Task SubscribeManyToSocket(WebSocket socket, Dictionary<string, Subject<string>> incomingObservables)
         {
             while (!socket.IsClosed)
             {
@@ -192,7 +202,7 @@ namespace Dapr.WebStream.Server
                             observable.OnError(new Exception(payload));
 
                             // Remove the observable, it will never be called again.
-                            incomingObservables.TryRemove(name, out observable);
+                            incomingObservables.Remove(name);
                             break;
                         }
 
@@ -202,7 +212,7 @@ namespace Dapr.WebStream.Server
                             observable.OnCompleted();
 
                             // Remove the observable, it will never be called again.
-                            incomingObservables.TryRemove(name, out observable);
+                            incomingObservables.Remove(name);
                             break;
                         }
                     }
@@ -227,9 +237,9 @@ namespace Dapr.WebStream.Server
         }
 
         /// <summary>
-        /// Subscribes to the provided <paramref name="observable"/>, sending all events to the provided <paramref name="socket"/>.
+        /// Subscribes to the provided <paramref name="handlerFunc"/>, sending all events to the provided <paramref name="socket"/>.
         /// </summary>
-        /// <param name="observable">
+        /// <param name="handlerFunc">
         /// The observable.
         /// </param>
         /// <param name="socket">
@@ -238,42 +248,36 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// The <see cref="Task"/> which will complete when either the observable completes (or errors) or the socket is closed (or errors).
         /// </returns>
-        private static async Task SubscribeViaSocket(IObservable<string> observable, WebSocket socket)
+        private static async Task SubscribeViaSocket(Func<IObservable<string>> handlerFunc, WebSocket socket)
         {
             var completion = new TaskCompletionSource<int>();
             var subscription = new IDisposable[] { null };
-            subscription[0] = observable.SelectMany(
-                next =>
+            
+            // Capture any exceptionss from the handler so that they can be propagated.
+            IObservable<string> outgoing;
+            try
+            {
+                outgoing = handlerFunc();
+            }
+            catch (Exception exception)
+            {
+                outgoing = Observable.Throw<string>(exception);
+            }
+
+            Action complete = () =>
+            {
+                if (subscription[0] != null)
                 {
-                    if (!socket.IsClosed)
-                    {
-                        return socket.Send('n' + next).ToObservable();
-                    }
+                    subscription[0].Dispose();
+                }
 
-                    if (subscription[0] != null)
-                    {
-                        subscription[0].Dispose();
-                    }
+                completion.TrySetResult(0);
+            };
 
-                    completion.SetResult(0);
-
-                    return Observable.Empty<Unit>();
-                },
-                error =>
-                {
-                    if (!socket.IsClosed)
-                    {
-                        return socket.Send('e' + JsonConvert.SerializeObject(error.Message)).ToObservable();
-                    }
-
-                    if (subscription[0] != null)
-                    {
-                        subscription[0].Dispose();
-                    }
-
-                    completion.SetResult(0);
-                    return Observable.Empty<Unit>();
-                },
+            // Until the socket is closed, pipe messages to it, then complete.
+            subscription[0] = outgoing.TakeWhile(_ => !socket.IsClosed).SelectMany(
+                next => socket.Send('n' + next).ToObservable(),
+                error => socket.Send('e' + JsonConvert.SerializeObject(error.Message)).ToObservable(),
                 () =>
                 {
                     if (!socket.IsClosed)
@@ -283,14 +287,8 @@ namespace Dapr.WebStream.Server
                         return send.SelectMany(_ => socket.Close((int)WebSocketCloseStatus.NormalClosure, "onCompleted").ToObservable());
                     }
 
-                    if (subscription[0] != null)
-                    {
-                        subscription[0].Dispose();
-                    }
-
-                    completion.SetResult(0);
                     return Observable.Empty<Unit>();
-                }).Subscribe();
+                }).Subscribe(_ => { }, _ => complete(), complete);
             await completion.Task;
         }
     }

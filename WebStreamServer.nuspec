@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>Dapr.WebStream.Server</id>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <title>WebStream Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
@@ -12,20 +12,16 @@
     <projectUrl>https://github.com/daprlabs/WebStreamServer</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Reactive Web Streams allows you to create controllers returning and consuming Rx observables, operating over WebSockets.</description>
-    <!-- <releaseNotes>Summary of changes made in this release of the package.</releaseNotes> -->
+    <releaseNotes>Improved WebSocket lifecycle handling and trimmed dependencies.</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>Rx Reactive WebStream Web Stream OWIN ASP.NET</tags>
     <dependencies>
-      <dependency id="Microsoft.AspNet.WebApi.Client" version="5.1.2" />
-      <dependency id="Microsoft.AspNet.WebApi.Core" version="5.1.2" />
       <dependency id="Microsoft.Owin" version="2.1.0" />
       <dependency id="Newtonsoft.Json" version="6.0.3" />
       <dependency id="Owin" version="1.0" />
       <dependency id="Rx-Core" version="2.2.4" />
       <dependency id="Rx-Interfaces" version="2.2.4" />
       <dependency id="Rx-Linq" version="2.2.4" />
-      <dependency id="Rx-Main" version="2.2.4" />
-      <dependency id="Rx-PlatformServices" version="2.2.4" />
     </dependencies>
   </metadata>
 </package>

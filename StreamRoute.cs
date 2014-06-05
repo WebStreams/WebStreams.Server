@@ -17,13 +17,13 @@ namespace Dapr.WebStream.Server
     internal class StreamRoute
     {
         /// <summary>
-        /// Gets or sets the template.
+        /// Gets or sets the route.
         /// </summary>
-        public string Template { get; set; }
+        public string Route { get; set; }
 
         /// <summary>
-        /// Gets or sets the target method.
+        /// Gets or sets the handler method.
         /// </summary>
-        public MethodInfo Method { get; set; }
+        public MethodInfo Handler { get; set; }
     }
 }
