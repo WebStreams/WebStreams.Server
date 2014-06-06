@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>Dapr.WebStream.Server</id>
-    <version>0.1.4</version>
+    <version>0.1.5</version>
     <title>WebStream Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>

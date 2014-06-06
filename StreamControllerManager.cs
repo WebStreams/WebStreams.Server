@@ -111,7 +111,7 @@ namespace Dapr.WebStream.Server
                 {
                     // Deserialize all other types as though they're JSON.
                     var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                    var deserialized = Expression.Call(null, deserialize, new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType) });
+                    var deserialized = Expression.Call(null, deserialize, new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
                     value = Expression.Convert(deserialized, parameter.ParameterType);
                 }
 
