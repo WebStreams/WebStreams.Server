@@ -82,7 +82,7 @@ namespace Dapr.WebStream.Server
                     // Strings need no conversion, just pluck the value from the parameter list.
                     value = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
                 }
-                else if (parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
+                else if (parameter.ParameterType.IsGenericType && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
                     // This is an incoming observable, get the proxy observable to pass in.
                     var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(name) });
