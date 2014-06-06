@@ -17,6 +17,7 @@ namespace Dapr.WebStream.Server
     using System.Reactive.Linq;
     using System.Reactive.Subjects;
     using System.Reactive.Threading.Tasks;
+    using System.Reflection;
     using System.Threading.Tasks;
 
     using Newtonsoft.Json;
@@ -61,12 +62,72 @@ namespace Dapr.WebStream.Server
         /// </typeparam>
         public static void UseWebStream<T>(this IAppBuilder app, JsonSerializerSettings serializerSettings = null)
         {
+            app.UseWebStream(typeof(T), serializerSettings);
+        }
+
+        /// <summary>
+        /// Use the WebStream middleware for all loaded stream controller types.
+        /// </summary>
+        /// <param name="app">
+        /// The app.
+        /// </param>
+        /// <param name="serializerSettings">
+        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// </param>
+        public static void UseWebStream(this IAppBuilder app, JsonSerializerSettings serializerSettings = null)
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            var types =
+                assemblies.SelectMany(_ => _.GetTypes());
+            var controllers = types.Where(
+                _ => _.GetCustomAttribute<RoutePrefixAttribute>() != null || _.GetCustomAttribute<StreamControllerAttribute>() != null);
+            var builder = new StreamControllerManager();
+            foreach (var controller in controllers)
+            {
+                app.UseWebStream(controller, serializerSettings, builder);
+            }
+        }
+
+        /// <summary>
+        /// Use the WebStream middleware for the provided controller type.
+        /// </summary>
+        /// <param name="app">
+        /// The app.
+        /// </param>
+        /// <param name="controllerType">
+        /// The stream controller type.
+        /// </param>
+        /// <param name="serializerSettings">
+        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// </param>
+        public static void UseWebStream(this IAppBuilder app, Type controllerType, JsonSerializerSettings serializerSettings)
+        {
+            var builder = new StreamControllerManager();
+            app.UseWebStream(controllerType, serializerSettings, builder);
+        }
+
+        /// <summary>
+        /// Use the WebStream middleware for the provided controller type.
+        /// </summary>
+        /// <param name="app">
+        /// The app.
+        /// </param>
+        /// <param name="controllerType">
+        /// The stream controller type.
+        /// </param>
+        /// <param name="serializerSettings">
+        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// </param>
+        /// <param name="builder">
+        /// The builder.
+        /// </param>
+        private static void UseWebStream(this IAppBuilder app, Type controllerType, JsonSerializerSettings serializerSettings, StreamControllerManager builder)
+        {
             serializerSettings = serializerSettings ?? DefaultSerializerSettings;
 
-            var builder = new StreamControllerManager();
-            var routes = builder.GetStreamRoutes(typeof(T));
+            var routes = builder.GetStreamRoutes(controllerType);
 
-            var controller = builder.GetStreamController(typeof(T));
+            var controller = builder.GetStreamController(controllerType);
             var invokers = routes.ToDictionary(r => r.Route, r => builder.GetInvoker(r.Handler, serializerSettings));
             app.Use(
                 async (ctx, next) =>

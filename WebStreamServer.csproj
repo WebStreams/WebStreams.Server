@@ -58,6 +58,7 @@
   <ItemGroup>
     <Compile Include="GenericMethodReflectionHelper.cs" />
     <Compile Include="RouteAttribute.cs" />
+    <Compile Include="StreamControllerAttribute.cs" />
     <Compile Include="RoutePrefixAttribute.cs" />
     <Compile Include="StreamControllerManager.cs" />
     <Compile Include="StreamRoute.cs" />
