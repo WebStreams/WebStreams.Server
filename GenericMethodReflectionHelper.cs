@@ -19,6 +19,36 @@ namespace Dapr.WebStream.Server
     internal static class GenericMethodReflectionHelper
     {
         /// <summary>
+        /// Returns a value indicating whether or not this is a numeric type.
+        /// </summary>
+        /// <param name="type">
+        /// The type.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> if <see cref="type"/> is numeric, <see langword="false"/> otherwise.
+        /// </returns>
+        public static bool IsNumericType(this Type type)
+        {
+            switch (Type.GetTypeCode(type))
+            {
+                case TypeCode.Byte:
+                case TypeCode.SByte:
+                case TypeCode.UInt16:
+                case TypeCode.UInt32:
+                case TypeCode.UInt64:
+                case TypeCode.Int16:
+                case TypeCode.Int32:
+                case TypeCode.Int64:
+                case TypeCode.Decimal:
+                case TypeCode.Double:
+                case TypeCode.Single:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Returns the generic method on <paramref name="type"/> matching the provided parameters.
         /// </summary>
         /// <param name="type">

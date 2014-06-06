@@ -18,6 +18,7 @@ namespace Dapr.WebStream.Server
     using System.Reflection;
 
     using Newtonsoft.Json;
+    using Newtonsoft.Json.Serialization;
 
     /// <summary>
     /// The stream controller manager.
@@ -109,10 +110,31 @@ namespace Dapr.WebStream.Server
                 }
                 else
                 {
-                    // Deserialize all other types as though they're JSON.
-                    var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                    var deserialized = Expression.Call(null, deserialize, new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
-                    value = Expression.Convert(deserialized, parameter.ParameterType);
+                    var contract = JsonSerializer.Create(serializerSettings).ContractResolver.ResolveContract(parameter.ParameterType);
+                    var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
+
+                    // Some primitives (eg GUIDs, DateTime) are serialized as strings & need to be wrapped in quotes before deserialization.
+                    if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType == typeof(bool))
+                    {
+                        // Wrap string-based primitive in quotes before deserializing.
+                        var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
+                        var quotedParameterValue = Expression.Add(Expression.Add(Expression.Constant("\""), parameterValue), Expression.Constant("\""));
+                        var deserialized = Expression.Call(
+                            null,
+                            deserialize,
+                            new Expression[] { quotedParameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
+                        value = Expression.Convert(deserialized, parameter.ParameterType);
+                    }
+                    else
+                    {
+                        // Serialize raw value for non-primitive types, bools, and numeric types.
+                        var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
+                        var deserialized = Expression.Call(
+                            null,
+                            deserialize,
+                            new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
+                        value = Expression.Convert(deserialized, parameter.ParameterType);
+                    }
                 }
 
                 parameters.Add(value);
