@@ -69,6 +69,7 @@ namespace Dapr.WebStream.Server
             // Reflect the methods being which are used below.
             var dictionaryGet = typeof(IDictionary<string, string>).GetMethod("get_Item");
             var deserialize = typeof(JsonConvert).GetMethod("DeserializeObject", new[] { typeof(string), typeof(Type), typeof(JsonSerializerSettings) });
+            var stringFormat = typeof(string).GetMethod("Format", new[] { typeof(string), typeof(object) });
             var invokeFunc = typeof(Func<string, IObservable<string>>).GetMethod("Invoke");
 
             // Construct expressions to retrieve each of the controller method's parameters.
@@ -114,11 +115,12 @@ namespace Dapr.WebStream.Server
                     var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
 
                     // Some primitives (eg GUIDs, DateTime) are serialized as strings & need to be wrapped in quotes before deserialization.
-                    if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType == typeof(bool))
+                    if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType != typeof(bool))
                     {
                         // Wrap string-based primitive in quotes before deserializing.
                         var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                        var quotedParameterValue = Expression.Add(Expression.Add(Expression.Constant("\""), parameterValue), Expression.Constant("\""));
+
+                        var quotedParameterValue = Expression.Call(null, stringFormat, new Expression[] { Expression.Constant("\"{0}\""), parameterValue });
                         var deserialized = Expression.Call(
                             null,
                             deserialize,
