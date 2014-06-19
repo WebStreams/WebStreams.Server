@@ -149,22 +149,6 @@ namespace Dapr.WebStream.Server
         }
 
         /// <summary>
-        /// Receive from the client into <paramref name="data"/>.
-        /// </summary>
-        /// <param name="data">
-        /// The data received.
-        /// </param>
-        /// <returns>
-        /// The <see cref="Task"/>.
-        /// </returns>
-        public async Task<ReceivedChunkMetadata> Receive(ArraySegment<byte> data)
-        {
-            this.ThrowIfDisposed();
-            var message = await this.receiveAsync(data, this.callCancelled);
-            return new ReceivedChunkMetadata { WebSocketMessageType = (WebSocketMessageType)message.Item1, EndOfMessage = message.Item2, Count = message.Item3 };
-        }
-
-        /// <summary>
         /// Receives and returns a string to the client.
         /// </summary>
         /// <returns>
@@ -222,27 +206,6 @@ namespace Dapr.WebStream.Server
             {
                 throw new ObjectDisposedException("This instance has been disposed.");
             }
-        }
-
-        /// <summary>
-        /// The received chunk metadata.
-        /// </summary>
-        public class ReceivedChunkMetadata
-        {
-            /// <summary>
-            /// Gets or sets the message type.
-            /// </summary>
-            public WebSocketMessageType WebSocketMessageType { get; set; }
-
-            /// <summary>
-            /// Gets or sets a value indicating whether the end of the message has been encountered.
-            /// </summary>
-            public bool EndOfMessage { get; set; }
-
-            /// <summary>
-            /// Gets or sets the number of bytes read.
-            /// </summary>
-            public int Count { get; set; }
         }
     }
 }

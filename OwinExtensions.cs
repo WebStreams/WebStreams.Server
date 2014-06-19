@@ -132,12 +132,12 @@ namespace Dapr.WebStream.Server
             app.Use(
                 async (ctx, next) =>
                 {
-                    var path = ctx.Request.Path.Value;
+                    var path = ctx.Request.Uri.AbsolutePath;
 
                     var accept = ctx.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
                     if (accept != null)
                     {
-                        var route = invokers.FirstOrDefault(r => path.StartsWith(r.Key));
+                        var route = invokers.FirstOrDefault(r => path == r.Key);
                         if (route.Value != null)
                         {
                             // Accept the socket.
@@ -194,7 +194,8 @@ namespace Dapr.WebStream.Server
                     };
 
                     // Hook up the incoming and outgoing message pumps.
-                    var outgoingMessagePump = SubscribeViaSocket(() => handler(controller, args, getIncoming), socket);
+                    var outgoing = GetObservableFromHandler(() => handler(controller, args, getIncoming));
+                    var outgoingMessagePump = SubscribeViaSocket(outgoing, socket);
                     var incomingMessagePump = SubscribeManyToSocket(socket, incoming);
 
                     // Close the socket when either pump finishes.
@@ -309,21 +310,10 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// The <see cref="Task"/> which will complete when either the observable completes (or errors) or the socket is closed (or errors).
         /// </returns>
-        private static async Task SubscribeViaSocket(Func<IObservable<string>> handlerFunc, WebSocket socket)
+        private static async Task SubscribeViaSocket(IObservable<string> outgoing, WebSocket socket)
         {
             var completion = new TaskCompletionSource<int>();
             var subscription = new IDisposable[] { null };
-            
-            // Capture any exceptionss from the handler so that they can be propagated.
-            IObservable<string> outgoing;
-            try
-            {
-                outgoing = handlerFunc();
-            }
-            catch (Exception exception)
-            {
-                outgoing = Observable.Throw<string>(exception);
-            }
 
             Action complete = () =>
             {
@@ -351,6 +341,22 @@ namespace Dapr.WebStream.Server
                     return Observable.Empty<Unit>();
                 }).Subscribe(_ => { }, _ => complete(), complete);
             await completion.Task;
+        }
+
+        private static IObservable<string> GetObservableFromHandler(Func<IObservable<string>> handlerFunc)
+        {
+            // Capture any exceptionss from the handler so that they can be propagated.
+            IObservable<string> outgoing;
+            try
+            {
+                outgoing = handlerFunc();
+            }
+            catch (Exception exception)
+            {
+                outgoing = Observable.Throw<string>(exception);
+            }
+
+            return outgoing;
         }
     }
 }
