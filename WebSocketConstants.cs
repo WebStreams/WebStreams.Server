@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="WebSocketConstants.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   The WebSocket OWIN constants.
 // </summary>

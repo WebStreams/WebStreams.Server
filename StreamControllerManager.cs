@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="StreamControllerManager.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   The stream controller manager.
 // </summary>

@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="StreamControllerAttribute.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   Attribute for denoting a stream controller.
 // </summary>

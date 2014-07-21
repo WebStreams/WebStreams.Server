@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="GenericMethodReflectionHelper.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   Reflection helper for generic methods.
 // </summary>

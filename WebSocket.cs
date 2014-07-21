@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="WebSocket.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   The web socket context.
 // </summary>

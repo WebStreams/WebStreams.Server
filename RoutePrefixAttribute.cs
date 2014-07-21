@@ -1,7 +1,4 @@
 // --------------------------------------------------------------------------------------------------------------------
-// <copyright file="RoutePrefixAttribute.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   Attribute for defining a routing prefix for all routes within a type.
 // </summary>

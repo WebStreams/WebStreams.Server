@@ -1,7 +1,4 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="OwinExtensions.cs" company="Dapr Labs">
-//   Copyright 2014.
-// </copyright>
 // <summary>
 //   OWIN extensions.
 // </summary>
@@ -21,6 +18,7 @@ namespace Dapr.WebStream.Server
     using System.Threading.Tasks;
 
     using Newtonsoft.Json;
+    using Newtonsoft.Json.Converters;
     using Newtonsoft.Json.Serialization;
 
     using Owin;
@@ -40,7 +38,9 @@ namespace Dapr.WebStream.Server
                                             ContractResolver = new CamelCasePropertyNamesContractResolver(),
                                             NullValueHandling = NullValueHandling.Ignore,
                                             MissingMemberHandling = MissingMemberHandling.Ignore,
+                                            DefaultValueHandling = DefaultValueHandling.Ignore,
                                         };
+            DefaultSerializerSettings.Converters.Add(new StringEnumConverter { CamelCaseText = true, AllowIntegerValues = true });
         }
 
         /// <summary>
@@ -180,13 +180,13 @@ namespace Dapr.WebStream.Server
             {
                 using (var socket = new WebSocket(environment))
                 {
-                    var incoming = new Dictionary<string, Subject<string>>();
+                    var incoming = new Dictionary<string, ISubject<string>>();
                     Func<string, IObservable<string>> getIncoming = name =>
                     {
-                        Subject<string> result;
+                        ISubject<string> result;
                         if (!incoming.TryGetValue(name, out result))
                         {
-                            result = new Subject<string>();
+                            result = new QueueSubject<string>();
                             incoming.Add(name, result);
                         }
 
@@ -216,7 +216,7 @@ namespace Dapr.WebStream.Server
         /// <returns>
         /// A <see cref="Task"/> which completes when an error occurs, the socket closes, or .
         /// </returns>
-        private static async Task SubscribeManyToSocket(WebSocket socket, Dictionary<string, Subject<string>> incomingObservables)
+        private static async Task SubscribeManyToSocket(WebSocket socket, Dictionary<string, ISubject<string>> incomingObservables)
         {
             while (!socket.IsClosed)
             {
@@ -239,7 +239,7 @@ namespace Dapr.WebStream.Server
                     var name = message.Substring(1, nameIndex - 1).ToLowerInvariant();
 
                     // Retrieve the named observable.
-                    Subject<string> observable;
+                    ISubject<string> observable;
                     if (!incomingObservables.TryGetValue(name, out observable))
                     {
                         // Observable not found, meaning that the controller method does not care about this observable.
@@ -299,11 +299,9 @@ namespace Dapr.WebStream.Server
         }
 
         /// <summary>
-        /// Subscribes to the provided <paramref name="handlerFunc"/>, sending all events to the provided <paramref name="socket"/>.
+        /// Subscribes to the provided <paramref name="outgoing"/> stream, sending all events to the provided <paramref name="socket"/>.
         /// </summary>
-        /// <param name="handlerFunc">
-        /// The observable.
-        /// </param>
+        /// <param name="outgoing">The outgoing stream.</param>
         /// <param name="socket">
         /// The socket.
         /// </param>
@@ -343,13 +341,22 @@ namespace Dapr.WebStream.Server
             await completion.Task;
         }
 
-        private static IObservable<string> GetObservableFromHandler(Func<IObservable<string>> handlerFunc)
+        /// <summary>
+        /// Returns an observable from the provided <paramref name="handler"/>.
+        /// </summary>
+        /// <param name="handler">
+        /// The handler delegate.
+        /// </param>
+        /// <returns>
+        /// The <see cref="IObservable{T}"/>.
+        /// </returns>
+        private static IObservable<string> GetObservableFromHandler(Func<IObservable<string>> handler)
         {
-            // Capture any exceptionss from the handler so that they can be propagated.
+            // Capture any exceptions from the handler so that they can be propagated.
             IObservable<string> outgoing;
             try
             {
-                outgoing = handlerFunc();
+                outgoing = handler();
             }
             catch (Exception exception)
             {
