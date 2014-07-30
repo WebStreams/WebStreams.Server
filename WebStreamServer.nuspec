@@ -2,25 +2,24 @@
 <package >
   <metadata>
     <id>Dapr.WebStream.Server</id>
-    <version>0.1.16</version>
+    <version>0.1.17</version>
     <title>WebStream Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
-    <!-- <licenseUrl>http://LICENSE_URL_HERE_OR_DELETE_THIS_LINE</licenseUrl>
-     -->
+    <licenseUrl>https://github.com/daprlabs/WebStreamServer/blob/master/LICENSE</licenseUrl>
     <!-- <iconUrl>http://ICON_URL_HERE_OR_DELETE_THIS_LINE</iconUrl> -->
     <projectUrl>https://github.com/daprlabs/WebStreamServer</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Reactive Web Streams allows you to create controllers returning and consuming Rx observables, operating over WebSockets.</description>
-    <releaseNotes>Fixed incoming parameter issue.</releaseNotes>
+    <releaseNotes>Finish when both incoming and outgoing message pumps complete</releaseNotes>
     <tags>Rx Reactive WebStream Web Stream OWIN ASP.NET</tags>
     <dependencies>
       <dependency id="Microsoft.Owin" version="2.1.0" />
       <dependency id="Newtonsoft.Json" version="6.0.3" />
       <dependency id="Owin" version="1.0" />
-      <dependency id="Rx-Core" version="2.2.4" />
-      <dependency id="Rx-Interfaces" version="2.2.4" />
-      <dependency id="Rx-Linq" version="2.2.4" />
+      <dependency id="Rx-Core" version="2.2.5" />
+      <dependency id="Rx-Interfaces" version="2.2.5" />
+      <dependency id="Rx-Linq" version="2.2.5" />
     </dependencies>
   </metadata>
 </package>

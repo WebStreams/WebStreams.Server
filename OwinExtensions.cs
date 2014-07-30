@@ -198,8 +198,8 @@ namespace Dapr.WebStream.Server
                     var outgoingMessagePump = SubscribeViaSocket(outgoing, socket);
                     var incomingMessagePump = SubscribeManyToSocket(socket, incoming);
 
-                    // Close the socket when either pump finishes.
-                    await Task.WhenAny(outgoingMessagePump, incomingMessagePump);
+                    // Close the socket when both pumps finish.
+                    await Task.WhenAll(outgoingMessagePump, incomingMessagePump);
                 }
             };
         }
