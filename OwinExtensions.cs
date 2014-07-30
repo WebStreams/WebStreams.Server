@@ -230,10 +230,9 @@ namespace Dapr.WebStream.Server
 
                     // Get the name of the incoming observable.
                     var nameIndex = message.IndexOf('.');
-                    if (nameIndex == 0)
+                    if (nameIndex <= 0)
                     {
-                        // Invalid message.
-                        continue;
+                        nameIndex = message.Length;
                     }
 
                     var name = message.Substring(1, nameIndex - 1).ToLowerInvariant();

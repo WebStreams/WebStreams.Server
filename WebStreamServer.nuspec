@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>Dapr.WebStream.Server</id>
-    <version>0.1.17</version>
+    <version>0.1.18</version>
     <title>WebStream Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
@@ -11,7 +11,7 @@
     <projectUrl>https://github.com/daprlabs/WebStreamServer</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Reactive Web Streams allows you to create controllers returning and consuming Rx observables, operating over WebSockets.</description>
-    <releaseNotes>Finish when both incoming and outgoing message pumps complete</releaseNotes>
+    <releaseNotes>Fix bug with input completion messages.</releaseNotes>
     <tags>Rx Reactive WebStream Web Stream OWIN ASP.NET</tags>
     <dependencies>
       <dependency id="Microsoft.Owin" version="2.1.0" />
