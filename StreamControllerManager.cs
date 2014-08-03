@@ -11,8 +11,13 @@ namespace Dapr.WebStream.Server
     using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
+    using System.Net.WebSockets;
+    using System.Reactive;
     using System.Reactive.Linq;
+    using System.Reactive.Subjects;
+    using System.Reactive.Threading.Tasks;
     using System.Reflection;
+    using System.Threading.Tasks;
 
     using Newtonsoft.Json;
     using Newtonsoft.Json.Serialization;
@@ -45,6 +50,54 @@ namespace Dapr.WebStream.Server
         public delegate IObservable<string> Invoker(object controller, IDictionary<string, string> parameters, Func<string, IObservable<string>> getObservable);
 
         /// <summary>
+        /// Returns a handler for incoming Web stream requests.
+        /// </summary>
+        /// <param name="handler">
+        /// The handler.
+        /// </param>
+        /// <param name="controller">
+        /// The controller.
+        /// </param>
+        /// <param name="args">
+        /// The request parameters.
+        /// </param>
+        /// <returns>
+        /// A handler for incoming Web stream requests.
+        /// </returns>
+        public static Func<IDictionary<string, object>, Task> CreateStreamHandler(
+            Invoker handler,
+            object controller,
+            IDictionary<string, string> args)
+        {
+            return async environment =>
+            {
+                using (var socket = new WebSocket(environment))
+                {
+                    var incoming = new Dictionary<string, ISubject<string>>();
+                    Func<string, IObservable<string>> getIncoming = name =>
+                    {
+                        ISubject<string> result;
+                        if (!incoming.TryGetValue(name, out result))
+                        {
+                            result = new QueueSubject<string>();
+                            incoming.Add(name, result);
+                        }
+
+                        return result;
+                    };
+
+                    // Hook up the incoming and outgoing message pumps.
+                    var outgoing = GetObservableFromHandler(() => handler(controller, args, getIncoming));
+                    var outgoingMessagePump = SubscribeViaSocket(outgoing, socket);
+                    var incomingMessagePump = SubscribeManyToSocket(socket, incoming);
+
+                    // Close the socket when both pumps finish.
+                    await Task.WhenAll(outgoingMessagePump, incomingMessagePump);
+                }
+            };
+        }
+
+        /// <summary>
         /// Returns the <see cref="Invoker"/> for the provided <paramref name="method"/>.
         /// </summary>
         /// <param name="method">
@@ -64,24 +117,26 @@ namespace Dapr.WebStream.Server
             var getObservableParameter = Expression.Parameter(typeof(Func<string, IObservable<string>>), "getObservable");
 
             // Reflect the methods being which are used below.
-            var dictionaryGet = typeof(IDictionary<string, string>).GetMethod("get_Item");
+            var tryGetValue = typeof(IDictionary<string, string>).GetMethod("TryGetValue");
             var deserialize = typeof(JsonConvert).GetMethod("DeserializeObject", new[] { typeof(string), typeof(Type), typeof(JsonSerializerSettings) });
             var stringFormat = typeof(string).GetMethod("Format", new[] { typeof(string), typeof(object) });
             var invokeFunc = typeof(Func<string, IObservable<string>>).GetMethod("Invoke");
 
             // Construct expressions to retrieve each of the controller method's parameters.
-            var parameters = new List<Expression>();
+            var parameterDictionaryVar = Expression.Variable(typeof(string), "paramVal");
+            var methodParameterVariables = new List<ParameterExpression>();
+            var parameterAssignments = new List<Expression>();
             foreach (var parameter in method.GetParameters())
             {
                 var name = parameter.Name.ToLowerInvariant();
 
-                Expression value;
-                if (parameter.ParameterType == typeof(string))
-                {
-                    // Strings need no conversion, just pluck the value from the parameter list.
-                    value = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                }
-                else if (parameter.ParameterType.IsGenericType && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
+                // Resulting parameter value.
+                var paramVar = Expression.Variable(parameter.ParameterType, parameter.Name);
+                methodParameterVariables.Add(paramVar);
+                Expression parameterAssignment;
+
+                // If the parameter is an observable, get the incoming stream using the "getObservable" parameter.
+                if (parameter.ParameterType.IsGenericType && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
                     // This is an incoming observable, get the proxy observable to pass in.
                     var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(name) });
@@ -104,39 +159,53 @@ namespace Dapr.WebStream.Server
                             new[] { next });
 
                     // Pass the converted observable in for the current parameter.
-                    value = Expression.Call(null, selectIncomingObservable, new Expression[] { incomingObservable, selector });
+                    parameterAssignment = Expression.Assign(
+                        paramVar,
+                        Expression.Call(null, selectIncomingObservable, new Expression[] { incomingObservable, selector }));
                 }
                 else
                 {
-                    var contract = JsonSerializer.Create(serializerSettings).ContractResolver.ResolveContract(parameter.ParameterType);
-                    var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
+                    // Try to get the parameter from the parameters dictionary and convert it if neccessary.
+                    Expression convertParam;
+                    var tryGetParam = Expression.Call(parametersParameter, tryGetValue, new Expression[] { Expression.Constant(name), parameterDictionaryVar });
 
-                    // Some primitives (eg GUIDs, DateTime) are serialized as strings & need to be wrapped in quotes before deserialization.
-                    if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType != typeof(bool))
+                    if (parameter.ParameterType == typeof(string))
                     {
-                        // Wrap string-based primitive in quotes before deserializing.
-                        var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-
-                        var quotedParameterValue = Expression.Call(null, stringFormat, new Expression[] { Expression.Constant("\"{0}\""), parameterValue });
-                        var deserialized = Expression.Call(
-                            null,
-                            deserialize,
-                            new Expression[] { quotedParameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
-                        value = Expression.Convert(deserialized, parameter.ParameterType);
+                        // Strings need no conversion, just pluck the value from the parameter list.
+                        convertParam = parameterDictionaryVar;
                     }
                     else
                     {
-                        // Serialize raw value for non-primitive types, bools, and numeric types.
-                        var parameterValue = Expression.Call(parametersParameter, dictionaryGet, new Expression[] { Expression.Constant(name) });
-                        var deserialized = Expression.Call(
-                            null,
-                            deserialize,
-                            new Expression[] { parameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
-                        value = Expression.Convert(deserialized, parameter.ParameterType);
+                        var contract = JsonSerializer.Create(serializerSettings).ContractResolver.ResolveContract(parameter.ParameterType);
+                        var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
+
+                        // Some primitives (eg GUIDs, DateTime) are serialized as strings & need to be wrapped in quotes before deserialization.
+                        if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType != typeof(bool))
+                        {
+                            // Wrap string-based primitive in quotes before deserializing.
+                            var quotedParameterValue = Expression.Call(null, stringFormat, new Expression[] { Expression.Constant("\"{0}\""), parameterDictionaryVar });
+                            var deserialized = Expression.Call(
+                                null,
+                                deserialize,
+                                new Expression[] { quotedParameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
+                            convertParam = Expression.Convert(deserialized, parameter.ParameterType);
+                        }
+                        else
+                        {
+                            // Serialize raw value for non-primitive types, bools, and numeric types.
+                            var deserialized = Expression.Call(
+                                null,
+                                deserialize,
+                                new Expression[] { parameterDictionaryVar, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
+                            convertParam = Expression.Convert(deserialized, parameter.ParameterType);
+                        }
                     }
+
+                    var trueBranch = Expression.Block(Expression.Assign(paramVar, convertParam), Expression.Empty());
+                    parameterAssignment = Expression.Condition(tryGetParam, trueBranch, Expression.Empty());
                 }
 
-                parameters.Add(value);
+                parameterAssignments.Add(parameterAssignment);
             }
 
             // Cast the controller into its native type and invoke it to get the outgoing observable.
@@ -146,7 +215,7 @@ namespace Dapr.WebStream.Server
             }
 
             var controller = (!method.IsStatic) ? Expression.Convert(controllerParameter, method.ReflectedType) : null;
-            var outgoingObservable = Expression.Call(controller, method, parameters);
+            var outgoingObservable = Expression.Call(controller, method, methodParameterVariables);
 
             // Convert the outgoing observable into an observable of strings.
             var selectToString = typeof(Observable).GetGenericMethod(
@@ -157,8 +226,14 @@ namespace Dapr.WebStream.Server
             var outgoingStringObservable =
                 Expression.Call(null, selectToString, new Expression[] { outgoingObservable, serialize });
 
+            parameterAssignments.Add(outgoingStringObservable);
+            methodParameterVariables.Add(parameterDictionaryVar);
+            var body = Expression.Block(methodParameterVariables.ToArray(), parameterAssignments);
+            
             // Return the compiled lambda.
-            return Expression.Lambda<Invoker>(outgoingStringObservable, controllerParameter, parametersParameter, getObservableParameter).Compile();
+            var result = Expression.Lambda<Invoker>(body, controllerParameter, parametersParameter, getObservableParameter);
+            var compiled = result.Compile();
+            return compiled;
         }
 
         /// <summary>
@@ -276,6 +351,167 @@ namespace Dapr.WebStream.Server
             return
                 streams
                     .Select(method => new StreamRoute { Handler = method, Route = this.JoinRouteParts(prefix, this.GetRouteSuffixTemplate(method)) });
+        }
+
+        /// <summary>
+        /// Pumps incoming messages from <paramref name="socket"/> into their corresponding observables.
+        /// </summary>
+        /// <param name="socket">
+        /// The socket.
+        /// </param>
+        /// <param name="incomingObservables">
+        /// The incoming observables.
+        /// </param>
+        /// <returns>
+        /// A <see cref="Task"/> which completes when an error occurs, the socket closes, or .
+        /// </returns>
+        private static async Task SubscribeManyToSocket(WebSocket socket, Dictionary<string, ISubject<string>> incomingObservables)
+        {
+            while (!socket.IsClosed)
+            {
+                try
+                {
+                    var message = await socket.ReceiveString();
+                    if (string.IsNullOrWhiteSpace(message))
+                    {
+                        continue;
+                    }
+
+                    // Get the name of the incoming observable.
+                    var nameIndex = message.IndexOf('.');
+                    if (nameIndex <= 0)
+                    {
+                        nameIndex = message.Length;
+                    }
+
+                    var name = message.Substring(1, nameIndex - 1).ToLowerInvariant();
+
+                    // Retrieve the named observable.
+                    ISubject<string> observable;
+                    if (!incomingObservables.TryGetValue(name, out observable))
+                    {
+                        // Observable not found, meaning that the controller method does not care about this observable.
+                        continue;
+                    }
+
+                    // Route the message to the correct method.
+                    switch (message[0])
+                    {
+                        case ResponseKind.Next:
+                            {
+                                // OnNext
+                                var payload = message.Substring(nameIndex + 1);
+                                observable.OnNext(payload);
+                                break;
+                            }
+
+                        case ResponseKind.Error:
+                            {
+                                // OnError
+                                var payload = message.Substring(nameIndex + 1);
+                                observable.OnError(new Exception(payload));
+
+                                // Remove the observable, it will never be called again.
+                                incomingObservables.Remove(name);
+                                break;
+                            }
+
+                        case ResponseKind.Completed:
+                            {
+                                // OnCompleted
+                                observable.OnCompleted();
+
+                                // Remove the observable, it will never be called again.
+                                incomingObservables.Remove(name);
+                                break;
+                            }
+                    }
+                }
+                catch (Exception)
+                {
+                    // An error occurred, exit.
+                    break;
+                }
+
+                if (!incomingObservables.Any())
+                {
+                    // No more observables, exit.
+                    break;
+                }
+            }
+
+            foreach (var observable in incomingObservables.Values)
+            {
+                observable.OnCompleted();
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to the provided <paramref name="outgoing"/> stream, sending all events to the provided <paramref name="socket"/>.
+        /// </summary>
+        /// <param name="outgoing">The outgoing stream.</param>
+        /// <param name="socket">
+        /// The socket.
+        /// </param>
+        /// <returns>
+        /// The <see cref="Task"/> which will complete when either the observable completes (or errors) or the socket is closed (or errors).
+        /// </returns>
+        private static async Task SubscribeViaSocket(IObservable<string> outgoing, WebSocket socket)
+        {
+            var completion = new TaskCompletionSource<int>();
+            var subscription = new IDisposable[] { null };
+
+            Action complete = () =>
+            {
+                if (subscription[0] != null)
+                {
+                    subscription[0].Dispose();
+                }
+
+                completion.TrySetResult(0);
+            };
+
+            // Until the socket is closed, pipe messages to it, then complete.
+            subscription[0] = outgoing.TakeWhile(_ => !socket.IsClosed).SelectMany(
+                next => socket.Send(ResponseKind.Next + next).ToObservable(),
+                error => socket.Send(ResponseKind.Error + JsonConvert.SerializeObject(error.Message)).ToObservable(),
+                () =>
+                {
+                    if (!socket.IsClosed)
+                    {
+                        // Send and close the socket.
+                        var send = socket.Send("c").ToObservable();
+                        return send.SelectMany(_ => socket.Close((int)WebSocketCloseStatus.NormalClosure, "onCompleted").ToObservable());
+                    }
+
+                    return Observable.Empty<Unit>();
+                }).Subscribe(_ => { }, _ => complete(), complete);
+            await completion.Task;
+        }
+
+        /// <summary>
+        /// Returns an observable from the provided <paramref name="handler"/>.
+        /// </summary>
+        /// <param name="handler">
+        /// The handler delegate.
+        /// </param>
+        /// <returns>
+        /// The <see cref="IObservable{T}"/>.
+        /// </returns>
+        private static IObservable<string> GetObservableFromHandler(Func<IObservable<string>> handler)
+        {
+            // Capture any exceptions from the handler so that they can be propagated.
+            IObservable<string> outgoing;
+            try
+            {
+                outgoing = handler();
+            }
+            catch (Exception exception)
+            {
+                outgoing = Observable.Throw<string>(exception);
+            }
+
+            return outgoing;
         }
     }
 }
