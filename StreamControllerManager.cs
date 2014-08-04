@@ -119,42 +119,45 @@ namespace Dapr.WebStream.Server
             // Reflect the methods being which are used below.
             var tryGetValue = typeof(IDictionary<string, string>).GetMethod("TryGetValue");
             var deserialize = typeof(JsonConvert).GetMethod("DeserializeObject", new[] { typeof(string), typeof(Type), typeof(JsonSerializerSettings) });
-            var stringFormat = typeof(string).GetMethod("Format", new[] { typeof(string), typeof(object) });
             var invokeFunc = typeof(Func<string, IObservable<string>>).GetMethod("Invoke");
 
             // Construct expressions to retrieve each of the controller method's parameters.
             var parameterDictionaryVar = Expression.Variable(typeof(string), "paramVal");
-            var methodParameterVariables = new List<ParameterExpression>();
+            var allVariables = new List<ParameterExpression> { parameterDictionaryVar };
+            var parameters = new List<ParameterExpression>();
             var parameterAssignments = new List<Expression>();
             foreach (var parameter in method.GetParameters())
             {
                 var name = parameter.Name.ToLowerInvariant();
 
                 // Resulting parameter value.
-                var paramVar = Expression.Variable(parameter.ParameterType, parameter.Name);
-                methodParameterVariables.Add(paramVar);
+                var paramType = parameter.ParameterType;
+                var paramVar = Expression.Variable(paramType, parameter.Name);
+                parameters.Add(paramVar);
                 Expression parameterAssignment;
 
                 // If the parameter is an observable, get the incoming stream using the "getObservable" parameter.
-                if (parameter.ParameterType.IsGenericType && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IObservable<>))
+                var serializerSettingsConst = Expression.Constant(serializerSettings);
+                if (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
                     // This is an incoming observable, get the proxy observable to pass in.
                     var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(name) });
 
                     // Select the proxy observable into the correct shape.
+                    var paramTypeArg = paramType.GenericTypeArguments[0];
                     var selectIncomingObservable = typeof(Observable).GetGenericMethod(
                         "Select",
-                        new[] { typeof(IObservable<string>), typeof(Func<,>).MakeGenericType(typeof(string), parameter.ParameterType.GenericTypeArguments[0]) },
-                        new[] { typeof(string), parameter.ParameterType.GenericTypeArguments[0] });
+                        new[] { typeof(IObservable<string>), typeof(Func<,>).MakeGenericType(typeof(string), paramTypeArg) },
+                        new[] { typeof(string), paramTypeArg });
                     var next = Expression.Parameter(typeof(string), "next");
-                    var observableType = parameter.ParameterType.GenericTypeArguments[0];
+                    var observableType = paramTypeArg;
                     var selector =
                         Expression.Lambda(
                             Expression.Convert(
                                 Expression.Call(
                                     null,
                                     deserialize,
-                                    new Expression[] { next, Expression.Constant(observableType), Expression.Constant(serializerSettings) }),
+                                    new Expression[] { next, Expression.Constant(observableType), serializerSettingsConst }),
                                 observableType),
                             new[] { next });
 
@@ -169,40 +172,61 @@ namespace Dapr.WebStream.Server
                     Expression convertParam;
                     var tryGetParam = Expression.Call(parametersParameter, tryGetValue, new Expression[] { Expression.Constant(name), parameterDictionaryVar });
 
-                    if (parameter.ParameterType == typeof(string))
+                    if (paramType == typeof(string))
                     {
                         // Strings need no conversion, just pluck the value from the parameter list.
                         convertParam = parameterDictionaryVar;
                     }
                     else
                     {
-                        var contract = JsonSerializer.Create(serializerSettings).ContractResolver.ResolveContract(parameter.ParameterType);
-                        var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
-
-                        // Some primitives (eg GUIDs, DateTime) are serialized as strings & need to be wrapped in quotes before deserialization.
-                        if (isPrimitive && !parameter.ParameterType.IsNumericType() && parameter.ParameterType != typeof(bool))
+                        // Determine whether or not the standard
+                        if (paramType.ShouldUseStaticTryParseMthod())
                         {
-                            // Wrap string-based primitive in quotes before deserializing.
-                            var quotedParameterValue = Expression.Call(null, stringFormat, new Expression[] { Expression.Constant("\"{0}\""), parameterDictionaryVar });
-                            var deserialized = Expression.Call(
-                                null,
-                                deserialize,
-                                new Expression[] { quotedParameterValue, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
-                            convertParam = Expression.Convert(deserialized, parameter.ParameterType);
+                            // Parse the value using the "TryParse" method of the parameter type.
+                            var tryParseMethod = paramType.GetMethod("TryParse", new[] { typeof(string), paramType.MakeByRefType() });
+                            var tryParseExp = Expression.Call(tryParseMethod, parameterDictionaryVar, paramVar);
+
+                            // Use the default value if parsing failed.
+                            convertParam = Expression.Block(tryParseExp, paramVar);
                         }
                         else
                         {
-                            // Serialize raw value for non-primitive types, bools, and numeric types.
-                            var deserialized = Expression.Call(
-                                null,
-                                deserialize,
-                                new Expression[] { parameterDictionaryVar, Expression.Constant(parameter.ParameterType), Expression.Constant(serializerSettings) });
-                            convertParam = Expression.Convert(deserialized, parameter.ParameterType);
+                            // Determine whether or not the value is a JSON primitive.
+                            var contract = JsonSerializer.Create(serializerSettings).ContractResolver.ResolveContract(paramType);
+                            var isPrimitive = contract.GetType() == typeof(JsonPrimitiveContract);
+
+                            // Use the provided serializer to deserialize the parameter value.
+                            var paramTypeConst = Expression.Constant(paramType);
+                            if (isPrimitive)
+                            {
+                                // String-based primitives such as DateTime need to be wrapped in quotes before deserialization.
+                                var quoteConst = Expression.Constant("\"");
+                                var stringConcatMethod = typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object), typeof(object) });
+                                var quotedParameterValue = Expression.Call(
+                                    null,
+                                    stringConcatMethod,
+                                    new Expression[] { quoteConst, parameterDictionaryVar, quoteConst });
+
+                                // Deserialize the quoted value.
+                                var deserialized = Expression.Call(
+                                    null,
+                                    deserialize,
+                                    new Expression[] { quotedParameterValue, paramTypeConst, serializerSettingsConst });
+                                convertParam = Expression.Convert(deserialized, paramType);
+                            }
+                            else
+                            {
+                                // Serialize raw value for non-primitive types, bools, and numeric types.
+                                var deserialized = Expression.Call(
+                                    null,
+                                    deserialize,
+                                    new Expression[] { parameterDictionaryVar, paramTypeConst, serializerSettingsConst });
+                                convertParam = Expression.Convert(deserialized, paramType);
+                            }
                         }
                     }
 
-                    var trueBranch = Expression.Block(Expression.Assign(paramVar, convertParam), Expression.Empty());
-                    parameterAssignment = Expression.Condition(tryGetParam, trueBranch, Expression.Empty());
+                    parameterAssignment = Expression.IfThen(tryGetParam, Expression.Assign(paramVar, convertParam));
                 }
 
                 parameterAssignments.Add(parameterAssignment);
@@ -215,7 +239,7 @@ namespace Dapr.WebStream.Server
             }
 
             var controller = (!method.IsStatic) ? Expression.Convert(controllerParameter, method.ReflectedType) : null;
-            var outgoingObservable = Expression.Call(controller, method, methodParameterVariables);
+            var outgoingObservable = Expression.Call(controller, method, parameters);
 
             // Convert the outgoing observable into an observable of strings.
             var selectToString = typeof(Observable).GetGenericMethod(
@@ -227,8 +251,8 @@ namespace Dapr.WebStream.Server
                 Expression.Call(null, selectToString, new Expression[] { outgoingObservable, serialize });
 
             parameterAssignments.Add(outgoingStringObservable);
-            methodParameterVariables.Add(parameterDictionaryVar);
-            var body = Expression.Block(methodParameterVariables.ToArray(), parameterAssignments);
+            allVariables.AddRange(parameters);
+            var body = Expression.Block(allVariables.ToArray(), parameterAssignments);
             
             // Return the compiled lambda.
             var result = Expression.Lambda<Invoker>(body, controllerParameter, parametersParameter, getObservableParameter);

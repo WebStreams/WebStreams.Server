@@ -16,6 +16,25 @@ namespace Dapr.WebStream.Server
     internal static class GenericMethodReflectionHelper
     {
         /// <summary>
+        /// Returns a value indicating whether or not deserialization should use a static TryParse method on the
+        /// provided <paramref name="type"/>.
+        /// </summary>
+        /// <param name="type">The type.</param>
+        /// <returns>
+        /// A value indicating whether or not deserialization should use a static TryParse method on the provided
+        /// <paramref name="type"/>.
+        /// </returns>
+        public static bool ShouldUseStaticTryParseMthod(this Type type)
+        {
+            if (type.IsNumericType())
+            {
+                return true;
+            }
+
+            return type == typeof(bool) || type == typeof(Guid);
+        }
+
+        /// <summary>
         /// Returns a value indicating whether or not this is a numeric type.
         /// </summary>
         /// <param name="type">
