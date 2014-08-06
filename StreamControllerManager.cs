@@ -128,8 +128,6 @@ namespace Dapr.WebStream.Server
             var parameterAssignments = new List<Expression>();
             foreach (var parameter in method.GetParameters())
             {
-                var name = parameter.Name.ToLowerInvariant();
-
                 // Resulting parameter value.
                 var paramType = parameter.ParameterType;
                 var paramVar = Expression.Variable(paramType, parameter.Name);
@@ -141,7 +139,7 @@ namespace Dapr.WebStream.Server
                 if (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
                     // This is an incoming observable, get the proxy observable to pass in.
-                    var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(name) });
+                    var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(parameter.Name) });
 
                     // Select the proxy observable into the correct shape.
                     var paramTypeArg = paramType.GenericTypeArguments[0];
@@ -170,7 +168,7 @@ namespace Dapr.WebStream.Server
                 {
                     // Try to get the parameter from the parameters dictionary and convert it if neccessary.
                     Expression convertParam;
-                    var tryGetParam = Expression.Call(parametersParameter, tryGetValue, new Expression[] { Expression.Constant(name), parameterDictionaryVar });
+                    var tryGetParam = Expression.Call(parametersParameter, tryGetValue, new Expression[] { Expression.Constant(parameter.Name), parameterDictionaryVar });
 
                     if (paramType == typeof(string))
                     {

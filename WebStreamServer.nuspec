@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>Dapr.WebStream.Server</id>
-    <version>0.1.22</version>
+    <version>0.1.24</version>
     <title>WebStream Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
@@ -15,7 +15,7 @@
     <tags>Rx Reactive WebStream Web Stream OWIN ASP.NET</tags>
     <dependencies>
       <dependency id="Microsoft.Owin" version="2.1.0" />
-      <dependency id="Newtonsoft.Json" version="6.0.3" />
+      <dependency id="Newtonsoft.Json" version="6.0.4" />
       <dependency id="Owin" version="1.0" />
       <dependency id="Rx-Core" version="2.2.5" />
       <dependency id="Rx-Interfaces" version="2.2.5" />
