@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Webstreams by daprlabs</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Webstreams</h1>
+        <p>Serve APIs returning &amp; consuming observable streams over WebSockets using .NET</p>
+
+        <p class="view"><a href="https://github.com/daprlabs/WebStreamServer">View the Project on GitHub <small>daprlabs/WebStreamServer</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/daprlabs/WebStreamServer/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/daprlabs/WebStreamServer/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/daprlabs/WebStreamServer">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>
+<a name="webstreams" class="anchor" href="#webstreams"><span class="octicon octicon-link"></span></a>WebStreams</h1>
+
+<p align="center">
+  <img src="https://github.com/daprlabs/WebStreamServer/blob/master/logo_icon.png"></p>
+
+<p>Serve APIs returning &amp; consuming observable streams over WebSockets using .NET</p>
+
+<p>Think of it as ASP.NET Web API but with controllers which return <code>IObservable&lt;T&gt;</code> instead of <code>Task&lt;T&gt;</code>, which allows you to easily push to clients. Controllers can also consume <code>IObservable&lt;T&gt;</code> parameters, see the <a href="https://github.com/daprlabs/WebStreamSamples/blob/master/ChatRoomController.cs">ChatController</a> example.</p>
+
+<h3>
+<a name="why-not-signalr" class="anchor" href="#why-not-signalr"><span class="octicon octicon-link"></span></a>Why not SignalR?</h3>
+
+<p>SignalR is great for a lot of realtime applications which scaleout easily, but it's not easy to create realtime apps which require authoritative logic - take a game for example, or other complex apps. This is perhaps because SignalR gives you transparent scale-out, so the rendezvous point for notifications (Service Bus, SQL Server, etc) does not contain application logic.</p>
+
+<p>Instead, WebStreams does not give you transparent scale-out at all. Scale-out can easily be achieved using Service Bus or another backplane like in a SignalR app, but often scale-out will sit in Microsoft Orleans or another Actor framework.
+Another option for scale-out is Azure Event Hubs, which can contain application logic.</p>
+
+<p>See the <a href="https://github.com/daprlabs/WebStreamSamples">WebStreamSamples</a> repository for a sample server with a Web client.</p>
+
+<p>TODO: publish sample which scales out app logic using Microsoft Orleans.</p>
+
+<h2>
+<a name="installation" class="anchor" href="#installation"><span class="octicon octicon-link"></span></a>Installation</h2>
+
+<pre><code>PM&gt; Install-Package Dapr.WebStream.Server
+</code></pre>
+
+<p>NuGet will pull in all dependencies (Owin, Json.NET, Rx).</p>
+
+<h2>
+<a name="usage" class="anchor" href="#usage"><span class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>Call UseWebStream() in your OWIN startup method. See below for an example.</p>
+
+<p>StockController.cs</p>
+
+<pre><code>[RoutePrefix("/stock")]
+public class StockTickerController
+{
+  private readonly ConcurrentDictionary&lt;string, IObservable&lt;Stock&gt;&gt; stocks =
+    new ConcurrentDictionary&lt;string, IObservable&lt;Stock&gt;&gt;();
+
+  [Route("ticker")]
+  public IObservable&lt;Stock&gt; GetTicker(string symbol)
+  {
+    return this.GetStockTicker(symbol);
+  }
+  private static IObservable&lt;Stock&gt; CreateStockTicker(string symbol)
+  {
+    var random = new Random();
+    // Construct a shoddy, pseudo-random walk.
+    return
+      Observable.Interval(TimeSpan.FromSeconds(0.1))
+        .Select(time =&gt; random.NextDouble())
+        .Scan((double)random.Next(1000), (prev, randomVal) =&gt;
+          Math.Max(0, prev * (1 + (0.01 * (randomVal - 0.5)))))
+        .Select(val =&gt; new Stock(symbol, val, DateTime.UtcNow));
+  }
+  private IObservable&lt;Stock&gt; GetStockTicker(string symbol)
+  {
+    return this.stocks.GetOrAdd(symbol, CreateStockTicker);
+  }
+}
+</code></pre>
+
+<p>In your OWIN Startup.cs</p>
+
+<pre><code>public void Configuration(IAppBuilder app)
+{
+    app.UseWebStream();
+}
+</code></pre>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/daprlabs">daprlabs</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
