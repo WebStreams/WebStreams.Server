@@ -6,7 +6,7 @@ WebStreams
 
 Serve APIs returning &amp; consuming observable streams over WebSockets using .NET
 
-Think of it as ASP.NET Web API but with controllers which return `IObservable<T>` instead of `Task<T>`, which allows you to easily push to clients.
+Think of it as ASP.NET Web API but with controllers which return `IObservable<T>` instead of `Task<T>`, which allows you to easily push to clients. Controllers can also consume `IObservable<T>` parameters, see the [ChatController](https://github.com/daprlabs/WebStreamSamples/blob/master/ChatRoomController.cs) example.
 
 ### Why not SignalR?
 SignalR is great for a lot of realtime applications which scaleout easily, but it's not easy to create realtime apps which require authoritative logic - take a game for example, or other complex apps. This is perhaps because SignalR gives you transparent scale-out, so the rendezvous point for notifications (Service Bus, SQL Server, etc) does not contain application logic.
