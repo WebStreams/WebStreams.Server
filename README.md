@@ -28,7 +28,7 @@ NuGet will pull in all dependencies (Owin, Json.NET, Rx).
 Call UseWebStream() in your OWIN startup method. See below for an example.
 
 StockController.cs
-```C#
+```csharp
 [RoutePrefix("/stock")]
 public class StockTickerController
 {
@@ -59,7 +59,7 @@ public class StockTickerController
 ```
 
 In your OWIN Startup.cs
-```C#
+```csharp
 public void Configuration(IAppBuilder app)
 {
     app.UseWebStream();
