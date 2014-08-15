@@ -4,17 +4,13 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStream.Server
+namespace Dapr.WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
     using System.Threading.Tasks;
-
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Converters;
-    using Newtonsoft.Json.Serialization;
 
     using Owin;
 
@@ -24,67 +20,45 @@ namespace Dapr.WebStream.Server
     public static class OwinExtensions
     {
         /// <summary>
-        /// Initializes static members of the <see cref="OwinExtensions"/> class.
-        /// </summary>
-        static OwinExtensions()
-        {
-            DefaultSerializerSettings = new JsonSerializerSettings
-                                        {
-                                            ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                                            NullValueHandling = NullValueHandling.Ignore,
-                                            MissingMemberHandling = MissingMemberHandling.Ignore,
-                                            DefaultValueHandling = DefaultValueHandling.Ignore,
-                                        };
-            DefaultSerializerSettings.Converters.Add(new StringEnumConverter { CamelCaseText = true, AllowIntegerValues = true });
-        }
-
-        /// <summary>
-        /// Gets or sets the default serializer settings.
-        /// </summary>
-        public static JsonSerializerSettings DefaultSerializerSettings { get; set; }
-
-        /// <summary>
         /// Use the WebStream middleware for the provided controller type.
         /// </summary>
         /// <param name="app">
         /// The app.
         /// </param>
-        /// <param name="serializerSettings">
-        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// <param name="settings">
+        /// The settings, or <see langword="null"/> to use <see cref="WebStreamsSettings.Default"/>.
         /// </param>
         /// <typeparam name="T">
         /// The stream controller type.
         /// </typeparam>
-        public static void UseWebStream<T>(this IAppBuilder app, JsonSerializerSettings serializerSettings = null)
+        public static void UseWebStreams<T>(this IAppBuilder app, WebStreamsSettings settings = null)
         {
-            app.UseWebStream(typeof(T), serializerSettings);
+            app.UseWebStreams(typeof(T), settings);
         }
 
         /// <summary>
-        /// Use the WebStream middleware for all loaded stream controller types.
+        /// Use the WebStreams middleware for all loaded stream controller types.
         /// </summary>
         /// <param name="app">
         /// The app.
         /// </param>
-        /// <param name="serializerSettings">
-        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// <param name="settings">
+        /// The settings, or <see langword="null"/> to use <see cref="WebStreamsSettings.Default"/>.
         /// </param>
-        public static void UseWebStream(this IAppBuilder app, JsonSerializerSettings serializerSettings = null)
+        public static void UseWebStreams(this IAppBuilder app, WebStreamsSettings settings = null)
         {
+            settings = settings ?? WebStreamsSettings.Default;
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            var types =
-                assemblies.SelectMany(_ => _.GetTypes());
+            var types = assemblies.SelectMany(_ => _.GetTypes());
             var controllers = types.Where(
                 _ => _.GetCustomAttribute<RoutePrefixAttribute>() != null || _.GetCustomAttribute<StreamControllerAttribute>() != null);
-            var builder = new StreamControllerManager();
-            foreach (var controller in controllers)
-            {
-                app.UseWebStream(controller, serializerSettings, builder);
-            }
+
+            var routes = controllers.SelectMany(controller => ControllerBuilder.GetRoutes(controller, settings));
+            app.UseWebStreams(settings, routes.ToDictionary(_ => _.Key, _ => _.Value));
         }
 
         /// <summary>
-        /// Use the WebStream middleware for the provided controller type.
+        /// Use the WebStreams middleware for the provided controller type.
         /// </summary>
         /// <param name="app">
         /// The app.
@@ -92,60 +66,46 @@ namespace Dapr.WebStream.Server
         /// <param name="controllerType">
         /// The stream controller type.
         /// </param>
-        /// <param name="serializerSettings">
-        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// <param name="settings">
+        /// The settings, or <see langword="null"/> to use <see cref="WebStreamsSettings.Default"/>.
         /// </param>
-        public static void UseWebStream(this IAppBuilder app, Type controllerType, JsonSerializerSettings serializerSettings)
+        private static void UseWebStreams(this IAppBuilder app, Type controllerType, WebStreamsSettings settings = null)
         {
-            var builder = new StreamControllerManager();
-            app.UseWebStream(controllerType, serializerSettings, builder);
+            settings = settings ?? WebStreamsSettings.Default;
+            app.UseWebStreams(settings, ControllerBuilder.GetRoutes(controllerType, settings));
         }
 
         /// <summary>
-        /// Use the WebStream middleware for the provided controller type.
+        /// Use the WebStreams middleware for the provided controller methods.
         /// </summary>
         /// <param name="app">
         /// The app.
         /// </param>
-        /// <param name="controllerType">
-        /// The stream controller type.
+        /// <param name="settings">
+        /// The settings.
         /// </param>
-        /// <param name="serializerSettings">
-        /// The serializer settings, or <see langword="null"/> to use <see cref="DefaultSerializerSettings"/>.
+        /// <param name="routes">
+        /// The controller routes.
         /// </param>
-        /// <param name="builder">
-        /// The builder.
-        /// </param>
-        private static void UseWebStream(this IAppBuilder app, Type controllerType, JsonSerializerSettings serializerSettings, StreamControllerManager builder)
+        private static void UseWebStreams(this IAppBuilder app, WebStreamsSettings settings, IDictionary<string, ControllerRoute> routes)
         {
-            serializerSettings = serializerSettings ?? DefaultSerializerSettings;
-
-            var routes = builder.GetStreamRoutes(controllerType);
-
-            var controller = builder.GetStreamController(controllerType);
-            var invokers = routes.ToDictionary(r => r.Route, r => builder.GetInvoker(r.Handler, serializerSettings));
             app.Use(
-                async (ctx, next) =>
+                async (environment, next) =>
                 {
-                    var path = ctx.Request.Uri.AbsolutePath;
+                    var path = environment.Request.Uri.AbsolutePath;
 
-                    var accept = ctx.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
-                    if (accept != null)
+                    var accept = environment.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
+                    ControllerRoute route;
+                    if (accept != null && routes.TryGetValue(path, out route))
                     {
-                        var route = invokers.FirstOrDefault(r => path == r.Key);
-                        if (route.Value != null)
-                        {
-                            // Accept the socket.
-                            var args = ctx.Request.Query.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault());
-                            accept(null, StreamControllerManager.CreateStreamHandler(route.Value, controller, args));
-                        }
-                        else
-                        {
-                            await next();
-                        }
+                        // Accept the socket.
+                        var args = environment.Request.Query.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault());
+                        var controller = settings.GetControllerInstanceDelegate(route.ControllerType);
+                        accept(null, route.GetRequestHandler(controller, args));
                     }
                     else
                     {
+                        // Allow the next handler to handle the request.
                         await next();
                     }
                 });

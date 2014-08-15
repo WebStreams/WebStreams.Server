@@ -4,12 +4,12 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStream.Server
+namespace Dapr.WebStreams.Server
 {
     /// <summary>
     /// The valid response kinds.
     /// </summary>
-    public static class ResponseKind
+    internal static class ResponseKind
     {
         /// <summary>
         /// The OnNext response kind.

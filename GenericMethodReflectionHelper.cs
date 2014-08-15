@@ -4,7 +4,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStream.Server
+namespace Dapr.WebStreams.Server
 {
     using System;
     using System.Linq;
@@ -103,7 +103,7 @@ namespace Dapr.WebStream.Server
                         return false;
                     }
 
-                    return DoGenericMethodParametersMatch(method, parameters, typeParameters);
+                    return GenericMethodParametersMatch(method, parameters, typeParameters);
                 }).Select(method => method.MakeGenericMethod(typeParameters)).FirstOrDefault();
         }
 
@@ -124,7 +124,7 @@ namespace Dapr.WebStream.Server
         /// <see langword="true"/> if the provided <see cref="parameters"/> match the parameters for
         /// <paramref name="method"/>; otherwise <see langword="false"/>
         /// </returns>
-        public static bool DoGenericMethodParametersMatch(this MethodInfo method, Type[] parameters, Type[] typeParameters)
+        public static bool GenericMethodParametersMatch(this MethodInfo method, Type[] parameters, Type[] typeParameters)
         {
             var generic = method.MakeGenericMethod(typeParameters);
             var methodParameters = generic.GetParameters();

@@ -1,17 +1,17 @@
 <?xml version="1.0"?>
 <package >
   <metadata>
-    <id>Dapr.WebStream.Server</id>
-    <version>0.1.24</version>
-    <title>WebStream Server</title>
+    <id>Dapr.WebStreams.Server</id>
+    <version>0.1.25</version>
+    <title>WebStreams Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
-    <licenseUrl>https://github.com/daprlabs/WebStreamServer/blob/master/LICENSE</licenseUrl>
-    <iconUrl>https://github.com/daprlabs/WebStreamServer/blob/master/logo_32.png</iconUrl>
-    <projectUrl>https://github.com/daprlabs/WebStreamServer</projectUrl>
+    <licenseUrl>https://github.com/daprlabs/WebStreams.Server/blob/master/LICENSE</licenseUrl>
+    <iconUrl>https://github.com/daprlabs/WebStreams.Server/blob/master/logo_32.png</iconUrl>
+    <projectUrl>https://github.com/daprlabs/WebStreams.Server</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Reactive Web Streams allows you to create controllers returning and consuming Rx observables, operating over WebSockets.</description>
-    <releaseNotes>Use static TryParse methods on most primitives and reduce size of generated IL.</releaseNotes>
+    <releaseNotes>Added ability to configure aspects of controllers.</releaseNotes>
     <tags>Rx Reactive WebStream Web Stream OWIN ASP.NET</tags>
     <dependencies>
       <dependency id="Microsoft.Owin" version="2.1.0" />
