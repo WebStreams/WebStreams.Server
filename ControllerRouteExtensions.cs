@@ -8,21 +8,38 @@ namespace Dapr.WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Globalization;
+    using System.IO;
+    using System.IO.Compression;
     using System.Linq;
     using System.Net.WebSockets;
     using System.Reactive;
     using System.Reactive.Linq;
     using System.Reactive.Threading.Tasks;
+    using System.Text;
+    using System.Threading;
     using System.Threading.Tasks;
+
+    using Microsoft.Owin;
 
     using Newtonsoft.Json;
 
     /// <summary>
     /// Extensions to <see cref="ControllerRoute"/>.
     /// </summary>
-    internal static class ControllerRouteExtensions
+    public static class ControllerRouteExtensions
     {
+        /// <summary>
+        /// Carriage-return followed by line-feed.
+        /// </summary>
+        private static readonly byte[] Crlf = { (byte)'\r', (byte)'\n' };
+
+        /// <summary>
+        /// The completed sequence string.
+        /// </summary>
+        private static readonly string Completed = ResponseKind.Completed.ToString();
+
         /// <summary>
         /// Returns a handler for incoming Web stream requests.
         /// </summary>
@@ -38,7 +55,7 @@ namespace Dapr.WebStreams.Server
         /// <returns>
         /// A handler for incoming Web stream requests.
         /// </returns>
-        public static Func<IDictionary<string, object>, Task> GetRequestHandler(
+        public static Func<IDictionary<string, object>, Task> WebSocketRequestHandler(
             this ControllerRoute route,
             object controller,
             IDictionary<string, string> args)
@@ -70,6 +87,144 @@ namespace Dapr.WebStreams.Server
                     // Close the socket when both pumps finish.
                     await Task.WhenAll(outgoingMessagePump, incomingMessagePump);
                 }
+            };
+        }
+
+        /// <summary>
+        /// Returns a handler for incoming Web stream requests.
+        /// </summary>
+        /// <param name="route">
+        /// The handler.
+        /// </param>
+        /// <param name="controller">
+        /// The controller.
+        /// </param>
+        /// <param name="args">
+        /// The request parameters.
+        /// </param>
+        /// <param name="environment">
+        /// The environment.
+        /// </param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>
+        /// A handler for incoming Web stream requests.
+        /// </returns>
+        public static async Task HttpRequestHandler(
+            this ControllerRoute route,
+            object controller,
+            IDictionary<string, string> args,
+            IOwinContext environment,
+            CancellationToken cancellationToken)
+        {
+            var response = environment.Response;              
+            var pump = new MutuallyExclusiveTaskExecutor();
+            var outgoing =
+                GetObservableFromHandler(() => route.Invoke(controller, args, _ => Observable.Empty<string>()));
+
+            var headersWritten = new[] { false };
+            response.Headers.Set("Transfer-Encoding", "Chunked");
+            response.ContentType = "application/json";
+
+            // Hook up the outgoing message pump to the response body.
+            var subscription = outgoing.Subscribe(
+                msg => pump.Schedule(
+                    async () =>
+                    {
+                        try
+                        {
+                            if (!headersWritten[0])
+                            {
+                                headersWritten[0] = true;
+
+                                // Set the response headers.
+                                response.StatusCode = 200;
+                            }
+
+                            await response.WriteAsync(msg, cancellationToken);
+                            await response.Body.FlushAsync(cancellationToken);
+                        }
+                        catch
+                        {
+                            pump.Complete();
+                            throw;
+                        }
+                    }),
+                e => pump.Schedule(
+                    async () =>
+                    {
+                        try
+                        {
+                            if (!headersWritten[0])
+                            {
+                                // Set the response headers.
+                                response.StatusCode = 500;
+                                headersWritten[0] = true;
+                            }
+
+                            await response.WriteAsync(e.ToString(), cancellationToken);
+                            await response.Body.FlushAsync(cancellationToken);
+                        }
+                        finally
+                        {
+                            pump.Complete();
+                        }
+                    }),
+                () => pump.Schedule(
+                    () =>
+                    {
+                        if (!headersWritten[0])
+                        {
+                            // No content.
+                            response.StatusCode = 204;
+                            response.Body.Close();
+                            response.Body = Stream.Null;
+                            headersWritten[0] = true;
+                        }
+
+                        pump.Complete();
+                        return Task.FromResult(0);
+                    }));
+
+            // When the cancellation token is cancelled, unsubscribe.
+            cancellationToken.Register(subscription.Dispose);
+            try
+            {
+                await pump.Run(cancellationToken);
+            }
+            finally
+            {
+                subscription.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Returns an HTTP request handler for single-return routes.
+        /// </summary>
+        /// <param name="route">The route.</param>
+        /// <param name="controller">The controller.</param>
+        /// <param name="args">The route arguments.</param>
+        /// <returns>An HTTP request handler for single-return routes.</returns>
+        private static Func<IOwinContext, Task> GetIdiomaticHttpRequestHandler(ControllerRoute route, object controller, IDictionary<string, string> args)
+        {
+            return async environment =>
+            {
+                var response = environment.Response;
+                int code;
+                string body;
+                try
+                {
+                    body = await route.Invoke(controller, args, _ => Observable.Empty<string>()).FirstAsync();
+                    code = 200;
+                }
+                catch (Exception e)
+                {
+                    body = e.ToString();
+                    code = 500;
+                }
+
+                response.StatusCode = code;
+                response.ContentType = "application/json";
+                await response.WriteAsync(body);
             };
         }
 
@@ -119,6 +274,17 @@ namespace Dapr.WebStreams.Server
                     // Route the message to the correct method.
                     switch (message[0])
                     {
+                        case ResponseKind.Final:
+                            {
+                                var payload = message.Substring(nameIndex + 1);
+                                observer.OnNext(payload);
+                                observer.OnCompleted();
+
+                                // Remove the observable, it will never be called again.
+                                observableParams.Remove(name);
+                                break;
+                            }
+
                         case ResponseKind.Next:
                             {
                                 var payload = message.Substring(nameIndex + 1);
@@ -231,6 +397,23 @@ namespace Dapr.WebStreams.Server
             }
 
             return outgoing;
+        }
+
+        /// <summary>
+        /// Writes <paramref name="message"/> to <paramref name="stream"/> and flushes the stream.
+        /// </summary>
+        /// <param name="stream">The stream.</param>
+        /// <param name="message">The message.</param>
+        /// <param name="token">The cancellation token.</param>
+        /// <returns>A <see cref="Task"/> representing the work performed.</returns>
+        private static async Task WriteChunkedMessage(Stream stream, string message, CancellationToken token)
+        {
+            var len = Encoding.UTF8.GetBytes(string.Format("{0:X}\r\n", message.Length));
+            var encoded = Encoding.UTF8.GetBytes(message);
+            await stream.WriteAsync(len, 0, len.Length, token);
+            await stream.WriteAsync(encoded, 0, encoded.Length, token);
+            await stream.WriteAsync(Crlf, 0, Crlf.Length, token);
+            await stream.FlushAsync(token);
         }
     }
 }

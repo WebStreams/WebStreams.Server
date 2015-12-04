@@ -25,5 +25,10 @@ namespace Dapr.WebStreams.Server
         /// The OnCompleted response kind.
         /// </summary>
         public const char Completed = 'c';
+
+        /// <summary>
+        /// The Final response kind, which represents OnNext followed immediately by OnCompleted.
+        /// </summary>
+        public const char Final = 'f';
     }
 }

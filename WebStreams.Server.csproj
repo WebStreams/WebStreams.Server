@@ -61,7 +61,11 @@
     <Compile Include="ControllerRoute.cs" />
     <Compile Include="ControllerRouteExtensions.cs" />
     <Compile Include="GenericMethodReflectionHelper.cs" />
+    <Compile Include="InvalidAttributeUsageException.cs" />
+    <Compile Include="MutuallyExclusiveTaskExecutor.cs" />
+    <Compile Include="BodyAttribute.cs" />
     <Compile Include="ResponseKind.cs" />
+    <Compile Include="PlainHttpAttribute.cs" />
     <Compile Include="RouteAttribute.cs" />
     <Compile Include="SingleSubscriptionObservable.cs" />
     <Compile Include="StreamControllerAttribute.cs" />

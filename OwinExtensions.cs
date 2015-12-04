@@ -8,9 +8,13 @@ namespace Dapr.WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Reflection;
+    using System.Text;
     using System.Threading.Tasks;
+
+    using Microsoft.Owin;
 
     using Owin;
 
@@ -93,15 +97,34 @@ namespace Dapr.WebStreams.Server
                 async (environment, next) =>
                 {
                     var path = environment.Request.Uri.AbsolutePath;
-
-                    var accept = environment.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
+                    var cancellationToken = environment.Request.CallCancelled;
                     ControllerRoute route;
-                    if (accept != null && routes.TryGetValue(path, out route))
+                    if (routes.TryGetValue(path, out route))
                     {
-                        // Accept the socket.
-                        var args = environment.Request.Query.ToDictionary(x => x.Key, x => x.Value.FirstOrDefault());
+                        var args = environment.Request.Query.ToDictionary(x => x.Key, x => Uri.UnescapeDataString(x.Value.First()));
                         var controller = settings.GetControllerInstanceDelegate(route.ControllerType);
-                        accept(null, route.GetRequestHandler(controller, args));
+
+                        // Determine if this is a WebSockets request.
+                        var accept = environment.Get<Action<IDictionary<string, object>, Func<IDictionary<string, object>, Task>>>(WebSocketConstants.Accept);
+                        if (environment.Request.IsWebSocketRequest() && accept != null)
+                        {
+                            // Accept using the WebSocket handler.
+                            accept(null, Dapr.WebStreams.Server.WebSocketRequestHandler(route, controller, args));
+                        }
+                        else
+                        {
+                            // Handle body-valued parameters.
+                            if (route.HasBodyParameter)
+                            {
+                                using (var reader = new StreamReader(environment.Request.Body, Encoding.UTF8, false))
+                                {
+                                    args[ControllerBuilder.BodyParameterName] = await reader.ReadToEndAsync();
+                                }
+                            }
+
+                            // Accept using the HTTP handler.
+                            await route.GetHttpRequestHandler(controller, args, environment, cancellationToken);
+                        }
                     }
                     else
                     {
@@ -109,6 +132,36 @@ namespace Dapr.WebStreams.Server
                         await next();
                     }
                 });
+        }
+
+        /// <summary>
+        /// Returns a value indicating whether or not this is a WebSocket request.
+        /// </summary>
+        /// <param name="request">The request.</param>
+        /// <returns>A value indicating whether or not this is a WebSocket request.</returns>
+        private static bool IsWebSocketRequest(this IOwinRequest request)
+        {
+            var isUpgrade = request.IsHeaderEqual("Connection", "Upgrade");
+            var isWebSocket = request.IsHeaderEqual("Upgrade", "WebSocket");
+            return isUpgrade & isWebSocket;
+        }
+
+        /// <summary>
+        /// Returns a value indicating whether or not <paramref name="request"/>'s <paramref name="header"/> value is
+        /// equal to <paramref name="value"/>.
+        /// </summary>
+        /// <param name="request">The request.</param>
+        /// <param name="header">The header name.</param>
+        /// <param name="value">The value to compare against.</param>
+        /// <returns>
+        /// A value indicating whether or not <paramref name="request"/>'s <paramref name="header"/> value is equal to
+        /// <paramref name="value"/>.
+        /// </returns>
+        private static bool IsHeaderEqual(this IOwinRequest request, string header, string value)
+        {
+            string[] headerValues;
+            return request.Headers.TryGetValue(header, out headerValues) && headerValues.Length == 1
+                   && string.Equals(value, headerValues[0], StringComparison.OrdinalIgnoreCase);
         }
     }
 }

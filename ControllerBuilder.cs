@@ -22,6 +22,11 @@ namespace Dapr.WebStreams.Server
     internal static class ControllerBuilder
     {
         /// <summary>
+        /// The body parameter name.
+        /// </summary>
+        public const string BodyParameterName = "$body";
+
+        /// <summary>
         /// Returns the steam controller routes for the provided <paramref name="controller"/>.
         /// </summary>
         /// <param name="controller">
@@ -121,14 +126,22 @@ namespace Dapr.WebStreams.Server
         /// <summary>
         /// Returns the <see cref="ControllerRoute.Invoker"/> for the provided <paramref name="method"/>.
         /// </summary>
-        /// <param name="method">The method.</param>
-        /// <param name="methodRoutePrefix">The route prefix for the controller.</param>
+        /// <param name="method">
+        /// The method.
+        /// </param>
+        /// <param name="settings">
+        /// The settings.
+        /// </param>
+        /// <param name="methodRoutePrefix">
+        /// The route prefix for the controller.
+        /// </param>
         /// <returns>
         /// The <see cref="ControllerRoute"/> for the provided <paramref name="method"/>.
         /// </returns>
         private static ControllerRoute GetControllerMethod(MethodInfo method, WebStreamsSettings settings, string methodRoutePrefix)
         {
             var observableParameters = new HashSet<string>();
+            var hasBodyParameter = false;
 
             // Define the parameters of the resulting invoker.
             var controllerParameter = Expression.Parameter(typeof(object), "controller");
@@ -153,10 +166,28 @@ namespace Dapr.WebStreams.Server
                 parameters.Add(paramVar);
                 Expression parameterAssignment;
 
+                // Check if this parameter is derived from the request body.
+                var isBody = parameter.GetCustomAttribute<BodyAttribute>() != null;
+                if (isBody)
+                {
+                    if (hasBodyParameter)
+                    {
+                        throw new InvalidAttributeUsageException(
+                            "BodyAttribute cannot be used with multiple parameters.");
+                    }
+
+                    hasBodyParameter = true;
+                }
+
                 // If the parameter is an observable, get the incoming stream using the "getObservable" parameter.
                 var serializerSettingsConst = Expression.Constant(settings.JsonSerializerSettings);
                 if (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(IObservable<>))
                 {
+                    if (isBody)
+                    {
+                        throw new InvalidAttributeUsageException("BodyAttribute cannot be used with observable parameters.");
+                    }
+
                     // Add the observable parameter to the stream controller definition.
                     observableParameters.Add(parameter.Name);
 
@@ -186,11 +217,12 @@ namespace Dapr.WebStreams.Server
                 else
                 {
                     // Try to get the parameter from the parameters dictionary and convert it if neccessary.
+                    var paramName = isBody ? BodyParameterName : parameter.Name;
                     Expression convertParam;
                     var tryGetParam = Expression.Call(
                         parametersParameter,
                         tryGetValue,
-                        new Expression[] { Expression.Constant(parameter.Name), parameterDictionaryVar });
+                        new Expression[] { Expression.Constant(paramName), parameterDictionaryVar });
 
                     if (paramType == typeof(string))
                     {
@@ -275,7 +307,7 @@ namespace Dapr.WebStreams.Server
 
             var lambda = Expression.Lambda<ControllerRoute.Invoker>(body, controllerParameter, parametersParameter, getObservableParameter);
             var route = JoinRouteParts(methodRoutePrefix, GetRouteSuffixTemplate(method));
-            return new ControllerRoute(route, method.DeclaringType, lambda.Compile(), observableParameters);
+            return new ControllerRoute(route, method.DeclaringType, lambda.Compile(), observableParameters, hasBodyParameter);
         }
     }
 }

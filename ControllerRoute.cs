@@ -29,8 +29,12 @@ namespace Dapr.WebStreams.Server
         /// <param name="observableParameters">
         /// The observable parameters.
         /// </param>
-        public ControllerRoute(string route, Type controllerType, Invoker invoker, HashSet<string> observableParameters)
+        /// <param name="hasBodyParameter">
+        /// The value indicating whether or not this route has a parameter derived from the request body.
+        /// </param>
+        public ControllerRoute(string route, Type controllerType, Invoker invoker, HashSet<string> observableParameters, bool hasBodyParameter)
         {
+            this.HasBodyParameter = hasBodyParameter;
             this.Route = route;
             this.ControllerType = controllerType;
             this.Invoke = invoker;
@@ -73,5 +77,10 @@ namespace Dapr.WebStreams.Server
         /// Gets the controller type.
         /// </summary>
         public Type ControllerType { get; private set; }
+
+        /// <summary>
+        /// Gets a value indicating whether or not this route has a parameter derived from the request body.
+        /// </summary>
+        public bool HasBodyParameter { get; private set; }
     }
 }
