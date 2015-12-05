@@ -4,7 +4,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStreams.Server
+namespace WebStreams.Server
 {
     /// <summary>
     /// The WebSocket OWIN constants.

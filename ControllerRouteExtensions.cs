@@ -4,7 +4,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStreams.Server
+namespace WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
@@ -26,7 +26,7 @@ namespace Dapr.WebStreams.Server
     /// <summary>
     /// Extensions to <see cref="ControllerRoute"/>.
     /// </summary>
-    public static class ControllerRouteExtensions
+    internal static class ControllerRouteExtensions
     {
         /// <summary>
         /// Carriage-return followed by line-feed.

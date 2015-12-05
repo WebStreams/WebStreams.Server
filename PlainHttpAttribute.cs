@@ -5,7 +5,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStreams.Server
+namespace WebStreams.Server
 {
     using System;
 

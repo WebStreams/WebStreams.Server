@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package >
   <metadata>
-    <id>Dapr.WebStreams.Server</id>
-    <version>0.2.03</version>
+    <id>WebStreams.Server</id>
+    <version>0.2.5</version>
     <title>WebStreams Server</title>
     <authors>Reuben Bond</authors>
     <owners>Dapr Labs</owners>
@@ -22,4 +22,9 @@
       <dependency id="Rx-Linq" version="2.2.5" />
     </dependencies>
   </metadata>
+  <files>
+    <file src="bin\Debug\WebStreams.Server.dll" target="lib\net45" />
+    <file src="bin\Debug\WebStreams.Server.pdb" target="lib\net45" />
+    <file src="bin\Debug\WebStreams.Server.xml" target="lib\net45" />
+  </files>
 </package>

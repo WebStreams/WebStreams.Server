@@ -4,7 +4,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStreams.Server
+namespace WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
@@ -15,7 +15,7 @@ namespace Dapr.WebStreams.Server
 
     using Newtonsoft.Json;
     using Newtonsoft.Json.Serialization;
-    
+
     /// <summary>
     /// Methods for constructing controllers
     /// </summary>

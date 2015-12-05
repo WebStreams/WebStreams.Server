@@ -4,7 +4,7 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace Dapr.WebStreams.Server
+namespace WebStreams.Server
 {
     using System;
     using System.Collections.Generic;
@@ -109,7 +109,7 @@ namespace Dapr.WebStreams.Server
                         if (environment.Request.IsWebSocketRequest() && accept != null)
                         {
                             // Accept using the WebSocket handler.
-                            accept(null, Dapr.WebStreams.Server.WebSocketRequestHandler(route, controller, args));
+                            accept(null, route.WebSocketRequestHandler(controller, args));
                         }
                         else
                         {
@@ -123,7 +123,7 @@ namespace Dapr.WebStreams.Server
                             }
 
                             // Accept using the HTTP handler.
-                            await route.GetHttpRequestHandler(controller, args, environment, cancellationToken);
+                            await route.HttpRequestHandler(controller, args, environment, cancellationToken);
                         }
                     }
                     else
