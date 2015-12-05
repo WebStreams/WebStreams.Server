@@ -20,7 +20,7 @@ TODO: publish sample which scales out app logic using Microsoft Orleans.
 
 ## Installation
 ```
-PM> Install-Package Dapr.WebStreams.Server
+PM> Install-Package WebStreams.Server
 ```
 NuGet will pull in all dependencies (Owin, Json.NET, Rx).
 
