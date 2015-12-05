@@ -185,14 +185,14 @@ namespace Dapr.WebStreams.Server
                 {
                     if (isBody)
                     {
-                        throw new InvalidAttributeUsageException("BodyAttribute cannot be used with observable parameters.");
+                        throw new InvalidAttributeUsageException($"{nameof(BodyAttribute)} cannot be used with observable parameters.");
                     }
 
                     // Add the observable parameter to the stream controller definition.
                     observableParameters.Add(parameter.Name);
 
                     // This is an incoming observable, get the proxy observable to pass in.
-                    var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, new Expression[] { Expression.Constant(parameter.Name) });
+                    var incomingObservable = Expression.Call(getObservableParameter, invokeFunc, Expression.Constant(parameter.Name));
 
                     // Select the proxy observable into the correct shape.
                     var paramTypeArg = paramType.GenericTypeArguments[0];
@@ -205,9 +205,17 @@ namespace Dapr.WebStreams.Server
                     var selector =
                         Expression.Lambda(
                             Expression.Convert(
-                                Expression.Call(null, deserialize, new Expression[] { next, Expression.Constant(observableType), serializerSettingsConst }),
+                                Expression.Call(
+                                    null,
+                                    deserialize,
+                                    new Expression[]
+                                    {
+                                        next,
+                                        Expression.Constant(observableType),
+                                        serializerSettingsConst
+                                    }),
                                 observableType),
-                            new[] { next });
+                            next);
 
                     // Pass the converted observable in for the current parameter.
                     parameterAssignment = Expression.Assign(
