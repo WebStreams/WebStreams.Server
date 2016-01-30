@@ -346,28 +346,24 @@ namespace WebStreams.Server
 
             Action complete = () =>
             {
-                if (subscription[0] != null)
-                {
-                    subscription[0].Dispose();
-                }
-
+                subscription[0]?.Dispose();
                 completion.TrySetResult(0);
             };
 
             // Until the socket is closed, pipe messages to it, then complete.
             subscription[0] = outgoing.TakeWhile(_ => !socket.IsClosed).SelectMany(
                 next => socket.Send(ResponseKind.Next + next).ToObservable(),
-                error => socket.Send(ResponseKind.Error + JsonConvert.SerializeObject(error.Message)).ToObservable(),
+                error => socket.Send(ResponseKind.Error + JsonConvert.SerializeObject(error.ToDetailedString())).ToObservable(),
                 () =>
                 {
-                    if (!socket.IsClosed)
+                    if (socket.IsClosed)
                     {
-                        // Send and close the socket.
-                        var send = socket.Send(ResponseKind.Completed.ToString(CultureInfo.InvariantCulture)).ToObservable();
-                        return send.SelectMany(_ => socket.Close((int)WebSocketCloseStatus.NormalClosure, "onCompleted").ToObservable());
+                        return Observable.Empty<Unit>();
                     }
 
-                    return Observable.Empty<Unit>();
+                    // Send and close the socket.
+                    var send = socket.Send(ResponseKind.Completed.ToString(CultureInfo.InvariantCulture)).ToObservable();
+                    return send.SelectMany(_ => socket.Close((int)WebSocketCloseStatus.NormalClosure, "onCompleted").ToObservable());
                 }).Subscribe(_ => { }, _ => complete(), complete);
             await completion.Task;
         }

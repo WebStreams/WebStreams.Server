@@ -61,6 +61,7 @@
   <ItemGroup>
     <Compile Include="ControllerRoute.cs" />
     <Compile Include="ControllerRouteExtensions.cs" />
+    <Compile Include="ExceptionExtensions.cs" />
     <Compile Include="GenericMethodReflectionHelper.cs" />
     <Compile Include="InvalidAttributeUsageException.cs" />
     <Compile Include="MutuallyExclusiveTaskExecutor.cs" />
@@ -82,6 +83,7 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
+    <None Include="README.md" />
     <None Include="WebStreams.Server.nuspec">
       <SubType>Designer</SubType>
     </None>
